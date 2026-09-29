@@ -1,0 +1,14 @@
+{
+  "target": "",
+  "grace": 3,
+  "camera_index": 0,
+  "alarm_volume": 0.25,
+  "alarm_file": "",
+  "preview_enabled": true,
+  "camera_enabled": true,
+  "realert_seconds": 20,
+  "sensitivity": 1.0,
+  "calibration_seconds": 10,
+  "break_minutes": 5,
+  "geometry": "1280x649+140+35"
+}
