@@ -7,12 +7,16 @@ This is a Windows desktop focus-session program. It watches the active window ti
 ## Run
 
 ```powershell
+python -m venv .venv
+```
+To run
+```powershell
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 python main.py
 ```
 
-The main window shows only what you need to run a session: the task phrase, the alert delay, the status banner, a distraction meter, the previews, and Start / Calibrate / Pause. Everything else — webcam on/off, camera number, screen preview, sensitivity, re-alert interval, calibration length, alarm tone, and data logging — lives behind the **⚙ Settings** button. A collapsible **Live signals** panel at the bottom shows the raw feature values.
+The main window shows only what you need to run a session: the task phrase, the alert delay, the status banner, a distraction meter, the previews, and Start / Calibrate / Pause. Everything else — webcam on/off, camera number, screen preview, sensitivity, re-alert interval, calibration length, alarm tone, and data logging — lives behind the **⚙ Settings** button. A collapsible **Live signals** panel at the bottom shows the raw feature values. Only on windows.
 
 The webcam and screen previews run on their own background threads, so the UI stays responsive. If the camera shows the wrong device, change the **Camera number** in Settings — the worker reconnects automatically, no restart needed.
 
