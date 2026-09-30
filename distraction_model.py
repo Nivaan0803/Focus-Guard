@@ -10,8 +10,8 @@ Two interchangeable back ends:
 * ``SklearnTree`` - a trained ``DecisionTreeClassifier`` loaded from
   ``models/distraction_tree.joblib`` (produced by ``train_model.py``).
 * ``HeuristicTree`` - a small transparent decision tree used whenever
-  scikit-learn or a trained model file is missing. It reproduces the original
-  hard-coded thresholds, so behaviour is unchanged with zero setup.
+  scikit-learn or a trained model file is missing, using the shared
+  ``LOOK_AWAY_LIMITS`` so it agrees with the camera overlay.
 
 Only ``load_model`` touches the disk, and only to read an existing model file.
 """
@@ -36,6 +36,11 @@ FEATURE_NAMES: Tuple[str, ...] = (
 )
 
 MODEL_PATH = Path(__file__).resolve().parent / "models" / "distraction_tree.joblib"
+
+# Head pitch (deg), head yaw (deg), iris offset beyond which the user counts as
+# looking away. Deliberately lenient: small head turns while still reading the
+# screen also shift the iris the other way, so tight limits flag normal motion.
+LOOK_AWAY_LIMITS: Tuple[float, float, float] = (28.0, 35.0, 0.25)
 
 FOCUSED = "focused"
 DISTRACTED = "distracted"
@@ -111,7 +116,8 @@ class HeuristicTree:
             pitch = abs(features.get("head_pitch", 0.0))
             yaw = abs(features.get("head_yaw", 0.0))
             iris = abs(features.get("iris_delta", 0.0))
-            if pitch > 18 or yaw > 22 or iris > 0.18:
+            pitch_limit, yaw_limit, iris_limit = LOOK_AWAY_LIMITS
+            if pitch > pitch_limit or yaw > yaw_limit or iris > iris_limit:
                 return DISTRACTED, 0.75, "looking away from screen"
 
         if features.get("tab_switches_per_min", 0.0) >= 15:

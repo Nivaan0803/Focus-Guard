@@ -24,6 +24,8 @@ from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 from PIL import Image, ImageGrab
 
+from distraction_model import LOOK_AWAY_LIMITS
+
 APP_DIR = Path(__file__).resolve().parent
 PHONE_MODEL = APP_DIR / "models" / "efficientdet_lite0.tflite"
 PHONE_MODEL_RELATIVE = Path("models") / "efficientdet_lite0.tflite"
@@ -34,7 +36,17 @@ FACE_MODEL = np.array([(0, 0, 0), (0, -63.6, -12.5), (-43.3, 32.7, -26),
 
 PREVIEW_MAX = (960, 540)
 PREVIEW_SIZE = PREVIEW_MAX
-DEFAULT_THRESHOLDS = (18.0, 22.0, 0.18)
+DEFAULT_THRESHOLDS = LOOK_AWAY_LIMITS
+POSE_SMOOTHING = 0.35  # EMA weight of the newest frame; damps solvePnP jitter
+
+# Phone detection: a raw hit must clear PHONE_MIN_SCORE, look phone-sized
+# (fingers or a hand right at the lens fill most of the frame), and repeat in
+# PHONE_CONFIRM_HITS of the last PHONE_WINDOW checks before it counts.
+PHONE_MIN_SCORE = 0.45
+PHONE_MAX_FRAME_FRACTION = (0.45, 0.65)  # max box width, height as share of frame
+PHONE_CHECK_INTERVAL = 0.35
+PHONE_WINDOW = 4
+PHONE_CONFIRM_HITS = 3
 
 
 def fit_preview(image_rgb: np.ndarray) -> np.ndarray:
@@ -88,7 +100,7 @@ def create_phone_detector():
     if not PHONE_MODEL.is_file():
         raise FileNotFoundError(f"Missing phone model: {PHONE_MODEL}")
 
-    options = dict(score_threshold=.20, category_allowlist=["cell phone"], max_results=1)
+    options = dict(score_threshold=PHONE_MIN_SCORE, category_allowlist=["cell phone"], max_results=3)
     try:
         return vision.ObjectDetector.create_from_options(vision.ObjectDetectorOptions(
             base_options=python.BaseOptions(model_asset_buffer=PHONE_MODEL.read_bytes()), **options))
@@ -105,6 +117,16 @@ def create_phone_detector():
                 ) from path_error
             finally:
                 os.chdir(cwd)
+
+
+def plausible_phone(detections, width: int, height: int):
+    """Return the best phone-sized detection box, or None."""
+    max_w, max_h = PHONE_MAX_FRAME_FRACTION
+    for detection in sorted(detections, key=lambda d: d.categories[0].score, reverse=True):
+        box = detection.bounding_box
+        if box.width <= max_w * width and box.height <= max_h * height:
+            return box.origin_x, box.origin_y, box.width, box.height
+    return None
 
 
 def open_camera(index: int):
@@ -213,13 +235,16 @@ class VisionWorker(threading.Thread):
         next_retry = 0.0
         last_phone = 0.0
         phone_box = None
+        phone_hits: deque = deque(maxlen=PHONE_WINDOW)
+        smooth_pose = smooth_iris = None
         stamps: deque = deque(maxlen=30)
 
         while not self._stop.is_set():
             try:
                 if not self._want.is_set():
                     cap, mesh, detector, open_index = self._teardown(cap, mesh, detector)
-                    phone_box = None
+                    phone_box = smooth_pose = smooth_iris = None
+                    phone_hits.clear()
                     self._publish(VisionResult(camera_message="Camera off"))
                     time.sleep(0.15)
                     continue
@@ -280,6 +305,12 @@ class VisionWorker(threading.Thread):
                     landmarks = mesh_result.multi_face_landmarks[0].landmark
                     pose = estimate_pose(landmarks, width, height)
                     iris = iris_position(landmarks)
+                    if pose is not None:
+                        smooth_pose = pose if smooth_pose is None else tuple(
+                            old + POSE_SMOOTHING * (new - old) for old, new in zip(smooth_pose, pose))
+                        pose = smooth_pose
+                    smooth_iris = iris if smooth_iris is None else smooth_iris + POSE_SMOOTHING * (iris - smooth_iris)
+                    iris = smooth_iris
                     openness = eye_openness(landmarks)
                     result.face_visible = True
                     result.eye_openness_value = openness
@@ -337,6 +368,7 @@ class VisionWorker(threading.Thread):
                     tag = "Gaze: looking away" if looking_away else "Face Mesh: detected"
                     cv2.putText(frame, tag, (12, 30), cv2.FONT_HERSHEY_SIMPLEX, .8, (70, 230, 90), 2)
                 else:
+                    smooth_pose = smooth_iris = None
                     _, _, _, cal_event, calibrating, _ = self._advance_calibration(None, None)
                     result.calibration_result = cal_event
                     with self._lock:
@@ -350,17 +382,19 @@ class VisionWorker(threading.Thread):
                     cv2.putText(frame, "Face Mesh: no face detected", (12, 30), cv2.FONT_HERSHEY_SIMPLEX, .75, (60, 60, 255), 2)
 
                 now = time.monotonic()
-                if detector is not None and now - last_phone >= 0.5:
+                if detector is not None and now - last_phone >= PHONE_CHECK_INTERVAL:
                     last_phone = now
                     try:
                         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
                         detections = detector.detect(mp_image).detections
                     except Exception:
                         detections = None
-                    phone_box = None
-                    if detections:
-                        box = detections[0].bounding_box
-                        phone_box = (box.origin_x, box.origin_y, box.width, box.height)
+                    candidate = plausible_phone(detections or [], width, height)
+                    phone_hits.append(candidate is not None)
+                    if sum(phone_hits) >= PHONE_CONFIRM_HITS:
+                        phone_box = candidate or phone_box
+                    else:
+                        phone_box = None
 
                 result.phone_present = phone_box is not None
                 if phone_box is not None:
@@ -401,9 +435,9 @@ class VisionWorker(threading.Thread):
                         self._neutral_pose = (float(np.median(s[:, 0])), float(np.median(s[:, 1])))
                         self._neutral_iris = float(np.median(s[:, 2]))
                         self._thresholds = (
-                            float(min(25.0, max(12.0, 3.5 * np.std(s[:, 0]) + 12.0))),
-                            float(min(30.0, max(15.0, 3.5 * np.std(s[:, 1]) + 15.0))),
-                            float(min(0.25, max(0.11, 5.0 * np.std(s[:, 2]) + 0.11))),
+                            float(min(40.0, 3.5 * np.std(s[:, 0]) + DEFAULT_THRESHOLDS[0])),
+                            float(min(48.0, 3.5 * np.std(s[:, 1]) + DEFAULT_THRESHOLDS[1])),
+                            float(min(0.35, 5.0 * np.std(s[:, 2]) + DEFAULT_THRESHOLDS[2])),
                         )
                         cal_event = "done"
                     else:

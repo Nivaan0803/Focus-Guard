@@ -29,7 +29,7 @@ Your settings (task phrase, delay, camera, volume, sensitivity, window size) are
 
 **Smoothing, pause, re-alert:** per-frame predictions feed a leaky "distraction score" (the amber bar) so a single noisy frame never alerts. **Pause alerts** (F6) suppresses alerts for 5 minutes for a legit break. **Re-alert every N s** nudges again if you stay distracted (0 = alert once per episode). When a session ends you get a summary (focused %, longest streak, what caused the alerts); tick **Save session summaries** to also append them to `session_history.csv`.
 
-The app also includes a local EfficientDet object detector for **cell phones**. A red bounding box and `PHONE DETECTED` label appear when it sees one; it only beeps after the phone remains visible for the selected delay. The model file is included at `models/efficientdet_lite0.tflite` and runs on-device. Very dark scenes, glare, an obscured phone, or a phone facing away from the camera can reduce accuracy.
+The app also includes a local EfficientDet object detector for **cell phones**. To avoid mistaking fingers or a hand for a phone, a detection must score at least 0.45, be phone-sized rather than filling the frame, and repeat in 3 of 4 checks (about one second) before it counts. A red bounding box and `PHONE DETECTED` label then appear; it only beeps after the phone remains visible for the selected delay. The model file is included at `models/efficientdet_lite0.tflite` and runs on-device. Very dark scenes, glare, an obscured phone, or a phone facing away from the camera can reduce accuracy.
 
 ## Decision-tree distraction model
 
