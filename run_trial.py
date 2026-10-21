@@ -173,9 +173,12 @@ def main() -> None:
         model = load_model()
         print(f"Using model: {getattr(model, 'name', type(model).__name__)}\n")
 
-        columns = ["timestamp", "condition", "phase", "ground_truth", "system_instant",
+        columns = ["elapsed", "condition", "phase", "ground_truth", "system_instant",
                    "system_alert", "score", *FEATURE_NAMES]
         rows_written = 0
+        # Seconds since this run began, not a Unix epoch: the epoch reads as
+        # "1.79E+09" in a spreadsheet, and the useful x-axis is time-into-run.
+        run_start = time.monotonic()
         score = 0.0
         distraction_started = None
         is_fresh = not out_path.exists() or out_path.stat().st_size == 0
@@ -206,7 +209,7 @@ def main() -> None:
                     would_alert = bool(distraction_started and now - distraction_started >= GRACE_SECONDS)
 
                     writer.writerow([
-                        f"{time.time():.3f}", args.condition, label, truth, state,
+                        f"{now - run_start:.2f}", args.condition, label, truth, state,
                         DISTRACTED if would_alert else FOCUSED,
                         f"{score:.3f}",
                         *[f"{features[name]:.4f}" for name in FEATURE_NAMES],

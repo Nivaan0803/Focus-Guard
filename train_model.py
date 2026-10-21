@@ -3,6 +3,17 @@
 Usage:
     python train_model.py session1.csv session2.csv ...
     python train_model.py "logs/*.csv"
+    python train_model.py alex="logs/alex_*.csv" sam="logs/sam_*.csv" ...
+
+Naming each argument after a person (person=glob) turns on a
+leave-one-person-out test: the tree is trained on everyone except one
+person, then scored on that person, once per person. That answers "does it
+work on someone it has never seen?", which ordinary k-fold can't, since
+neighbouring 1/8-second ticks from the same session are nearly identical and
+leak between folds.
+
+Both main.py "Start logging" CSVs (``label`` column) and run_trial.py CSVs
+(``ground_truth`` column) are accepted.
 
 Collect data first: run main.py, start a focus session, click "Start logging",
 and set the label ("focused" / "distracted") to match what you are actually
@@ -19,11 +30,12 @@ import sys
 
 import numpy as np
 
-from distraction_model import FEATURE_NAMES, MODEL_PATH
+from distraction_model import DISTRACTED, FEATURE_NAMES, MODEL_PATH
 
 try:
     import joblib
     from sklearn.metrics import classification_report, confusion_matrix
+    from sklearn.metrics import accuracy_score, precision_recall_fscore_support
     from sklearn.model_selection import cross_val_predict, cross_val_score
     from sklearn.tree import DecisionTreeClassifier, export_text
 except ImportError:
@@ -41,15 +53,42 @@ def load_rows(patterns):
                         features.append([float(record[name]) for name in FEATURE_NAMES])
                     except (KeyError, ValueError, TypeError):
                         continue
-                    labels.append((record.get("label") or "focused").strip() or "focused")
+                    label = record.get("label") or record.get("ground_truth") or "focused"
+                    labels.append(label.strip() or "focused")
     return np.asarray(features, dtype=float), np.asarray(labels)
+
+
+def load_grouped(args):
+    """Load ``name=glob`` (or bare glob) arguments; return X, y and a per-row group name.
+
+    Groups are None when no argument is named.
+    """
+    named = [arg for arg in args if "=" in arg]
+    if named and len(named) != len(args):
+        sys.exit("Either name every argument (person=glob) or none of them.")
+    if not named:
+        X, y = load_rows(args)
+        return X, y, None
+    Xs, ys, groups = [], [], []
+    for arg in args:
+        name, pattern = arg.split("=", 1)
+        X, y = load_rows([pattern])
+        if len(X) == 0:
+            print(f"[{name}] no rows found for {pattern!r} - skipping.")
+            continue
+        Xs.append(X)
+        ys.append(y)
+        groups.extend([name] * len(X))
+    if not Xs:
+        return np.empty((0, len(FEATURE_NAMES))), np.asarray([]), None
+    return np.vstack(Xs), np.concatenate(ys), np.asarray(groups)
 
 
 def main(argv) -> None:
     if not argv:
         sys.exit(__doc__)
 
-    X, y = load_rows(argv)
+    X, y, groups = load_grouped(argv)
     if len(X) < 20:
         sys.exit(f"Need at least ~20 labelled rows, found {len(X)}.")
 
@@ -86,6 +125,10 @@ def main(argv) -> None:
     else:
         print("Fewer than 2 rows in the smallest class — skipping cross-validation report.")
 
+    person_results = None
+    if groups is not None and len(set(groups)) >= 2:
+        person_results = leave_one_person_out(tree, X, y, groups)
+
     tree.fit(X, y)
     print("\nLearned rules:\n")
     print(export_text(tree, feature_names=list(FEATURE_NAMES)))
@@ -94,10 +137,38 @@ def main(argv) -> None:
     joblib.dump({"model": tree, "feature_names": list(FEATURE_NAMES)}, MODEL_PATH)
     print(f"Saved {MODEL_PATH}")
 
-    _save_charts(tree, list(FEATURE_NAMES), matrix, labels_sorted)
+    _save_charts(tree, list(FEATURE_NAMES), matrix, labels_sorted, person_results)
 
 
-def _save_charts(tree, feature_names, matrix, labels_sorted) -> None:
+def leave_one_person_out(tree, X, y, groups):
+    """Train on all-but-one person, test on the held-out person, for each person."""
+    from sklearn.base import clone
+
+    results = []
+    print("\nLeave-one-person-out (trained without this person, tested on them):\n")
+    print(f"{'person':<14}{'n':>6}{'accuracy':>10}{'precision':>11}{'recall':>8}")
+    for person in sorted(set(groups)):
+        test = groups == person
+        train_y = y[~test]
+        if len(set(train_y)) < 2:
+            print(f"{person:<14}  skipped - the other people's data has only one label")
+            continue
+        model = clone(tree).fit(X[~test], train_y)
+        predicted = model.predict(X[test])
+        acc = accuracy_score(y[test], predicted)
+        prec, rec, _, _ = precision_recall_fscore_support(
+            y[test], predicted, labels=[DISTRACTED], zero_division=0)
+        results.append((person, int(test.sum()), acc, prec[0], rec[0]))
+        print(f"{person:<14}{int(test.sum()):>6}{acc:>10.2f}{prec[0]:>11.2f}{rec[0]:>8.2f}")
+    if results:
+        accs = np.array([r[2] for r in results])
+        print(f"\nMean accuracy on unseen people: {accs.mean():.3f} "
+              f"(range {accs.min():.2f}-{accs.max():.2f}, {len(results)} people)")
+        print("Precision/recall are for the 'distracted' class.")
+    return results
+
+
+def _save_charts(tree, feature_names, matrix, labels_sorted, person_results=None) -> None:
     """Save poster-ready PNGs: feature importance and the out-of-fold confusion matrix.
 
     Optional — skipped with a note if matplotlib isn't installed.
@@ -123,6 +194,9 @@ def _save_charts(tree, feature_names, matrix, labels_sorted) -> None:
     plt.close(fig)
     print(f"Saved {importance_path}")
 
+    if person_results:
+        _save_person_chart(plt, person_results)
+
     if matrix is None:
         return
 
@@ -145,6 +219,27 @@ def _save_charts(tree, feature_names, matrix, labels_sorted) -> None:
     fig.savefig(cm_path, dpi=150)
     plt.close(fig)
     print(f"Saved {cm_path}")
+
+
+def _save_person_chart(plt, person_results) -> None:
+    names = [r[0] for r in person_results]
+    accs = [r[2] for r in person_results]
+    mean = float(np.mean(accs))
+    fig, ax = plt.subplots(figsize=(max(5, len(names) * 0.9), 4))
+    ax.bar(names, accs, color="#2a78d6", width=0.6)
+    ax.axhline(mean, color="#52514e", linestyle="--", linewidth=1.5)
+    ax.text(len(names) - 0.5, mean, f" mean {mean:.2f}", va="bottom", ha="right", color="#52514e")
+    for i, acc in enumerate(accs):
+        ax.text(i, acc + 0.01, f"{acc:.2f}", ha="center", va="bottom", fontsize=9)
+    ax.set_ylim(0, 1.05)
+    ax.set_ylabel("Accuracy on held-out person")
+    ax.set_title("Does it work on people it was never trained on?")
+    ax.spines[["top", "right"]].set_visible(False)
+    fig.tight_layout()
+    path = MODEL_PATH.parent / "leave_one_person_out.png"
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    print(f"Saved {path}")
 
 
 if __name__ == "__main__":

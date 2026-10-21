@@ -7,16 +7,12 @@ This is a Windows desktop focus-session program. It watches the active window ti
 ## Run
 
 ```powershell
-python -m venv .venv
-```
-To run
-```powershell
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 python main.py
 ```
 
-The main window shows only what you need to run a session: the task phrase, the alert delay, the status banner, a distraction meter, the previews, and Start / Calibrate / Pause. Everything else — webcam on/off, camera number, screen preview, sensitivity, re-alert interval, calibration length, alarm tone, and data logging — lives behind the **⚙ Settings** button. A collapsible **Live signals** panel at the bottom shows the raw feature values. Only on windows.
+The main window shows only what you need to run a session: the task phrase, the alert delay, the status banner, a distraction meter, the previews, and Start / Calibrate / Pause. Everything else — webcam on/off, camera number, screen preview, sensitivity, re-alert interval, calibration length, alarm tone, and data logging — lives behind the **⚙ Settings** button. A collapsible **Live signals** panel at the bottom shows the raw feature values.
 
 The webcam and screen previews run on their own background threads, so the UI stays responsive. If the camera shows the wrong device, change the **Camera number** in Settings — the worker reconnects automatically, no restart needed.
 
@@ -33,7 +29,7 @@ Your settings (task phrase, delay, camera, volume, sensitivity, window size) are
 
 **Smoothing, pause, re-alert:** per-frame predictions feed a leaky "distraction score" (the amber bar) so a single noisy frame never alerts. **Pause alerts** (F6) suppresses alerts for 5 minutes for a legit break. **Re-alert every N s** nudges again if you stay distracted (0 = alert once per episode). When a session ends you get a summary (focused %, longest streak, what caused the alerts); tick **Save session summaries** to also append them to `session_history.csv`.
 
-The app also includes a local EfficientDet object detector for **cell phones**. To avoid mistaking fingers or a hand for a phone, a detection must score at least 0.45, be phone-sized rather than filling the frame, and repeat in 3 of 4 checks (about one second) before it counts. A red bounding box and `PHONE DETECTED` label then appear; it only beeps after the phone remains visible for the selected delay. The model file is included at `models/efficientdet_lite0.tflite` and runs on-device. Very dark scenes, glare, an obscured phone, or a phone facing away from the camera can reduce accuracy.
+The app also includes a local EfficientDet object detector for **cell phones**. A red bounding box and `PHONE DETECTED` label appear when it sees one; it only beeps after the phone remains visible for the selected delay. The model file is included at `models/efficientdet_lite0.tflite` and runs on-device. Very dark scenes, glare, an obscured phone, or a phone facing away from the camera can reduce accuracy.
 
 ## Decision-tree distraction model
 
@@ -113,3 +109,78 @@ models agreed and how many times a mid-session posture-drift prompt fired
 calibrated neutral pose and suggests recalibrating (F7) if it has drifted).
 `matplotlib` is optional — install it to get the PNGs; everything else works
 without it.
+
+### Does it work on people it has never seen? (leave-one-person-out)
+
+Ordinary k-fold cross-validation is optimistic here: neighbouring 1/8-second
+ticks from the same session are almost identical, so near-copies of the test
+rows end up in training. Name each CSV group after the person it came from and
+`train_model.py` also runs a leave-one-person-out test. It trains on everyone
+except one person, scores that person, and repeats for each person:
+
+```powershell
+python train_model.py p01="logs/p01_*.csv" p02="logs/p02_*.csv" p03="logs/p03_*.csv"
+```
+
+It prints per-person accuracy/precision/recall and saves
+`models/leave_one_person_out.png`. Both `main.py` logs (`label` column) and
+`run_trial.py` logs (`ground_truth` column) are accepted.
+
+### Does each signal earn its place? (baselines)
+
+`evaluate_model.py` also pools all the data and compares the full model with
+single-signal versions of the heuristic tree: **phone only**, **tab only**, and
+**camera only**. It saves `models/baseline_comparison.png`. If the full model
+beats every baseline, combining signals is justified. Note that `run_trial.py`
+fixes the tab signals to "on task", so a fair *tab only* number needs
+`main.py` logs that include real tab switching.
+
+## Does real-time feedback actually help? (user study)
+
+`focus_study.py` is a timed mental-arithmetic task that measures focus
+independently of the detector: correct answers per minute, accuracy, seconds
+spent outside the task window, how many times the participant left it, and a
+1-10 self-rating. Each participant does it twice, once with Focus Guard
+alerting (task phrase `Focus Study`) and once without. Odd-numbered
+participants do *alerts* first and even-numbered ones do *no alerts* first, so
+practice and fatigue cancel out. The full protocol is in the script's docstring.
+
+```powershell
+python focus_study.py --participant P01 --condition alerts
+python focus_study.py --participant P01 --condition no_alerts
+python analyze_study.py
+```
+
+`analyze_study.py` compares each person with themselves. It reports the mean
+change and a paired t-test p-value for every measure, and saves
+`study/study_results.png`, where each grey line is one person. Use anonymous
+IDs and get each participant's consent (and a parent's, if under 18), as your
+fair's human-subjects rules require.
+
+## Booth demo mode (F9)
+
+Press **F9** (or **▶ Demo mode**) for a full-screen view you can read from
+across a room. It shows a giant FOCUSED / CHECKING / DISTRACTED banner, the
+exact reason the model gave, live head pose, gaze, phone and window signals,
+and the last 60 seconds of the distraction score with the alert threshold. It
+starts a session automatically if one isn't running. **F7** calibrates, **F5**
+starts/stops, **Esc** exits.
+
+By default it records nothing. Tick **Record booth demos (F9) to `demo_logs/`**
+in Settings → Data & model and each demo also leaves a paper trail, so a run
+with a visitor at the booth becomes evidence instead of a memory:
+
+| File | One row per | Holds |
+| --- | --- | --- |
+| `demo_logs/demo_<timestamp>.csv` | half-second of the demo | the twelve features the tree saw, its verdict, the smoothed score, the reason it named |
+| `demo_logs/demo_index.csv` | demo | start time, length, tick count, share of distracted ticks, alerts fired, most common reason |
+
+The footer of the demo view names the file it is writing while recording is on.
+Still no webcam frames, screenshots or window titles — the same numbers the
+decision tree sees, nothing more. The per-row `label` is always `unlabelled`,
+because a visitor's demo has no ground truth: this data describes how the
+detector behaved across many faces and lighting conditions, it is not training
+data. (Explicitly labelling it also stops `train_model.py` from reading these
+rows as "focused" if they ever get globbed in by mistake.) Pass the index to a
+spreadsheet for booth statistics — "n demos, median length, alert rate" — or a
+single demo CSV to the same plotting as a session log.

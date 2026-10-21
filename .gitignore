@@ -4,3 +4,16 @@ __pycache__/
 *.pyc
 .idea/
 exportToHTML/
+
+# Local preferences (window geometry, task phrase, camera index)
+settings.json
+
+# Recorded data — stays on the machine that made it.
+# study/ may contain human-subjects data and must never be published.
+session_history.csv
+session_charts/
+demo_logs/
+study/
+focus_session*.csv
+models/*.joblib
+models/*.png

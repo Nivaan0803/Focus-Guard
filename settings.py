@@ -23,6 +23,7 @@ DEFAULTS = {
     "sensitivity": 1.0,
     "calibration_seconds": 10,
     "break_minutes": 5,
+    "record_demos": False,
     "geometry": "",
 }
 

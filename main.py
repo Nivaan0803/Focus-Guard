@@ -24,6 +24,7 @@ import pygame
 import sounddevice as sd
 from PIL import Image, ImageTk
 
+import demo_recorder
 import session_chart
 import settings as settings_store
 from distraction_model import DISTRACTED, FOCUSED, HeuristicTree, describe_model, load_model
@@ -77,6 +78,11 @@ class FocusGuard(tk.Tk):
         self.columnconfigure(0, weight=1)
         self._settings_win = None
         self._gaze_hold_until = 0.0
+        self.demo_win = None
+        self.demo_image = None
+        self.last_reason = ""
+        self.last_features: dict = {}
+        self.status_kind = "idle"
 
         self.target = tk.StringVar(value=self.prefs["target"])
         self.grace = tk.IntVar(value=self.prefs["grace"])
@@ -90,6 +96,7 @@ class FocusGuard(tk.Tk):
         self.calibration_seconds = tk.IntVar(value=self.prefs["calibration_seconds"])
         self.break_minutes = tk.IntVar(value=self.prefs["break_minutes"])
         self.save_summaries = tk.BooleanVar(value=False)
+        self.record_demos = tk.BooleanVar(value=self.prefs["record_demos"])
         self.log_label = tk.StringVar(value="focused")
 
         self.running = False
@@ -135,6 +142,7 @@ class FocusGuard(tk.Tk):
         self._drift_notice = ""
         self._last_drift_prompt = 0.0
         self.logger = SessionLogger()
+        self.demo_log = demo_recorder.DemoRecorder()
         self.log_label.trace_add("write", lambda *_: self.logger.set_label(self.log_label.get()))
 
         self.vision = VisionWorker()
@@ -236,8 +244,10 @@ class FocusGuard(tk.Tk):
         ttk.Label(header, text="Focus Guard", style="H1.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Label(header, text="Local, on-device distraction monitor — nothing leaves your machine",
                   style="Muted.TLabel").grid(row=1, column=0, sticky="w", pady=(2, 0))
+        ttk.Button(header, text="▶  Demo mode (F9)", style="Ghost.TButton",
+                   command=self.open_demo).grid(row=0, column=1, rowspan=2, sticky="e", padx=(0, 8))
         ttk.Button(header, text="⚙  Settings", style="Ghost.TButton",
-                   command=self.open_settings).grid(row=0, column=1, rowspan=2, sticky="e")
+                   command=self.open_settings).grid(row=0, column=2, rowspan=2, sticky="e")
 
         setup = self._card(1)
         setup.columnconfigure(1, weight=1)
@@ -375,11 +385,14 @@ class FocusGuard(tk.Tk):
         self.log_button.grid(row=2, column=2, sticky="w", padx=(8, 0), pady=(10, 0))
         ttk.Checkbutton(dat, text="Save session summaries to session_history.csv",
                         variable=self.save_summaries).grid(row=3, column=0, columnspan=3, sticky="w", pady=(10, 0))
+        ttk.Checkbutton(dat, text="Record booth demos (F9) to demo_logs/",
+                        variable=self.record_demos,
+                        command=self.save_settings).grid(row=4, column=0, columnspan=3, sticky="w", pady=(4, 0))
         ttk.Label(dat, style="CardMuted.TLabel", wraplength=460, justify="left",
                   text=("No webcam video, screenshots, or window titles are saved or sent anywhere. "
-                        "settings.json stores your preferences; feature logs and session summaries are written "
-                        "only when you turn them on.")
-                  ).grid(row=4, column=0, columnspan=3, sticky="w", pady=(10, 0))
+                        "settings.json stores your preferences; feature logs, session summaries and demo "
+                        "recordings are written only when you turn them on.")
+                  ).grid(row=5, column=0, columnspan=3, sticky="w", pady=(10, 0))
 
         ttk.Button(win, text="Done", command=win.destroy).grid(row=3, column=0, sticky="e", pady=(16, 0))
 
@@ -416,6 +429,7 @@ class FocusGuard(tk.Tk):
         self.bind("<F6>", lambda _event: self.toggle_pause())
         self.bind("<F7>", lambda _event: self.start_calibration())
         self.bind("<F8>", lambda _event: self.flip_log_label())
+        self.bind("<F9>", lambda _event: self.open_demo())
 
     def wire_settings_traces(self) -> None:
         self.camera_enabled.trace_add("write", lambda *_: self._apply_camera_toggle())
@@ -476,6 +490,8 @@ class FocusGuard(tk.Tk):
             self.update_health(now)
             if self.running:
                 self.session_tick(now)
+            if self.demo_win is not None:
+                self.render_demo(now)
         finally:
             self.after(90, self.pump)
 
@@ -579,6 +595,8 @@ class FocusGuard(tk.Tk):
             self.metrics["Data logging"].set(f"{self.logger.rows} rows · {self.logger.label}")
 
         state, _confidence, reason = self.model.predict(features)
+        self.last_reason = reason if state == DISTRACTED else ""
+        self.last_features = features
         if self.compare_model is not None:
             alt_state, _, _ = self.compare_model.predict(features)
             self.model_compared += 1
@@ -604,6 +622,9 @@ class FocusGuard(tk.Tk):
 
         self.handle_alerts(now, distracted, reason, grace)
         self.update_status_and_stats(now, allowed, title, distracted, reason, grace, dt)
+        if self.demo_log.active:
+            self.demo_log.log(now - self.session_start, features, state, self.score,
+                              reason if state == DISTRACTED else "", self.alerts)
 
     def check_calibration_drift(self, now: float, features: dict) -> None:
         """Flag a stale calibration baseline from resting-pose readings.
@@ -673,20 +694,178 @@ class FocusGuard(tk.Tk):
             self.current_streak = 0.0
 
         if now < self.paused_until:
+            self.status_kind = "pause"
             left = self.paused_until - now
             self.set_status(f"On a break — {int(left // 60)}:{int(left % 60):02d} left (F6 to end)", BANNER["pause"])
         elif distracted and self.distraction_started and now - self.distraction_started >= grace:
+            self.status_kind = "bad"
             self.set_status(f"DISTRACTED — {reason}. Back to: {self.target.get() or 'your task'}", BANNER["bad"])
         elif distracted:
+            self.status_kind = "warn"
             self.set_status(f"Checking — {reason}…", BANNER["warn"])
         elif allowed:
+            self.status_kind = "good"
             self.set_status(f"FOCUSED — {title[:88]}", BANNER["good"])
         else:
+            self.status_kind = "off"
             self.set_status(f"OFF TASK — expected tab: {self.target.get()}", BANNER["warn"])
 
         self.stats.configure(text=(
             f"Focused {self.show_time(self.focused)}    Off-task {self.show_time(self.off_task)}    "
             f"Alerts {self.alerts}    Streak {self.show_time(self.best_streak)}"))
+
+    # ------------------------------------------------------------ booth demo view
+    def open_demo(self) -> None:
+        """Full-screen, read-from-across-the-room view for a science-fair booth.
+
+        Shows the live verdict, the exact reason the model gave, the raw
+        signals it saw, and the last minute of the distraction score. Its
+        window title contains APP_TITLE, so it counts as the task window and
+        visitors only trigger alerts by actually looking away or picking up
+        a phone. Nothing is recorded unless "Record booth demos" is ticked in
+        Settings, and even then only the model's own feature numbers.
+        """
+        if self.demo_win is not None:
+            self.demo_win.lift()
+            return
+        if not self.running:
+            if not self.target.get().strip():
+                self.target.set("Focus Guard")
+            self.toggle()
+        recording = self.demo_log.start() if self.record_demos.get() else None
+
+        win = tk.Toplevel(self, bg=BG)
+        self.demo_win = win
+        win.title(f"{APP_TITLE} — demo view")
+        win.attributes("-fullscreen", True)
+        win.columnconfigure(0, weight=3)
+        win.columnconfigure(1, weight=2)
+        win.rowconfigure(2, weight=1)
+        for key in ("<Escape>", "<F9>"):
+            win.bind(key, lambda _e: self.close_demo())
+        win.bind("<F5>", lambda _e: self.toggle())
+        win.bind("<F7>", lambda _e: self.start_calibration())
+        win.protocol("WM_DELETE_WINDOW", self.close_demo)
+
+        self.demo_banner = tk.Label(win, text="", font=("Segoe UI", 48, "bold"), fg="white",
+                                    bg=BANNER["idle"], pady=10)
+        self.demo_banner.grid(row=0, column=0, columnspan=2, sticky="ew")
+        self.demo_reason = tk.Label(win, text="", font=("Segoe UI", 24), fg=INK, bg=BG, pady=6)
+        self.demo_reason.grid(row=1, column=0, columnspan=2, sticky="ew")
+
+        self.demo_camera = tk.Label(win, bg="#10151f", fg=MUTE, font=("Segoe UI", 18),
+                                    text="Starting webcam…")
+        self.demo_camera.grid(row=2, column=0, sticky="nsew", padx=(28, 14), pady=8)
+
+        tiles = tk.Frame(win, bg=CARD, padx=24, pady=12)
+        tiles.grid(row=2, column=1, sticky="nsew", padx=(14, 28), pady=8)
+        tiles.columnconfigure((0, 1), weight=1, uniform="tile")
+        tk.Label(tiles, text="WHAT THE MODEL SEES", font=("Segoe UI", 13, "bold"),
+                 fg=MUTE, bg=CARD).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 6))
+        self.demo_tiles = {}
+        for index, name in enumerate(("Head tilt (pitch)", "Head turn (yaw)", "Eye gaze offset",
+                                      "Eye openness", "Face visible", "Phone in view",
+                                      "Task window", "Distraction score")):
+            row, col = divmod(index, 2)
+            cell = tk.Frame(tiles, bg=CARD)
+            cell.grid(row=row + 1, column=col, sticky="w", pady=3, padx=(0, 12))
+            tk.Label(cell, text=name, font=("Segoe UI", 12), fg=MUTE, bg=CARD).pack(anchor="w")
+            value = tk.Label(cell, text="--", font=("Segoe UI", 19, "bold"), fg=INK, bg=CARD)
+            value.pack(anchor="w")
+            self.demo_tiles[name] = value
+
+        timeline = tk.Frame(win, bg=BG)
+        timeline.grid(row=3, column=0, columnspan=2, sticky="ew", padx=28, pady=(8, 0))
+        tk.Label(timeline, text="Distraction score — last 60 seconds   (dashed line = alert threshold, red = alert)",
+                 font=("Segoe UI", 14), fg=MUTE, bg=BG).pack(anchor="w")
+        self.demo_canvas = tk.Canvas(timeline, height=110, bg=CARD, highlightthickness=0)
+        self.demo_canvas.pack(fill="x", pady=(6, 0))
+
+        privacy = "Runs entirely on this laptop — no video is saved or sent"
+        if recording is not None:
+            privacy += f"   ·   recording signals to demo_logs/{recording.name}"
+        tk.Label(win, text=f"Model: {describe_model(self.model)}   ·   F7 calibrate   ·   F5 start/stop   ·   "
+                           f"Esc exit demo   ·   {privacy}",
+                 font=("Segoe UI", 13), fg=MUTE, bg=BG, pady=8).grid(row=4, column=0, columnspan=2)
+        win.focus_force()
+
+    def close_demo(self) -> None:
+        if self.demo_win is not None:
+            self.demo_win.destroy()
+        self.demo_win = None
+        self.demo_image = None
+        rows = self.demo_log.rows
+        if self.demo_log.stop() is not None:
+            self.set_status(f"Demo recorded — {rows} rows in demo_logs/, rolled up in demo_index.csv",
+                            BANNER["idle"])
+
+    def render_demo(self, now: float) -> None:
+        try:
+            if not self.running:
+                kind, word = "idle", "Press F5 to start"
+            elif self.camera_enabled.get() and not self.vision.calibrated():
+                kind, word = "idle", "Press F7 to calibrate"
+            else:
+                kind = self.status_kind
+                word = {"good": "FOCUSED", "warn": "CHECKING…", "bad": "DISTRACTED",
+                        "off": "OFF TASK", "pause": "ON A BREAK"}.get(kind, "")
+            color = BANNER.get(kind, BANNER["warn"])
+            if now < self.visual_alert_until and self.visual_alert_on:
+                color = "#d18a00"
+            self.demo_banner.configure(text=word, bg=color)
+            self.demo_reason.configure(text=f"Why: {self.last_reason}" if self.last_reason else "")
+
+            res = self.vision.latest()
+            if self.camera_enabled.get() and res.frame_rgb is not None:
+                frame = self._fit_to_label(res.frame_rgb, self.demo_camera)
+                self.demo_image = ImageTk.PhotoImage(Image.fromarray(frame))
+                self.demo_camera.configure(image=self.demo_image, text="")
+
+            f = self.last_features
+            calibrated = bool(f.get("calibrated"))
+
+            def gaze(key, fmt):
+                return fmt.format(f.get(key, 0.0)) if calibrated else "needs F7"
+
+            values = {
+                "Head tilt (pitch)": gaze("head_pitch", "{:+.0f}°"),
+                "Head turn (yaw)": gaze("head_yaw", "{:+.0f}°"),
+                "Eye gaze offset": gaze("iris_delta", "{:+.2f}"),
+                "Eye openness": f"{f.get('eye_openness', 0.0):.2f}" if f else "--",
+                "Face visible": ("yes" if f.get("face_visible") else "no") if f else "--",
+                "Phone in view": ("YES" if f.get("phone_present") else "no") if f else "--",
+                "Task window": ("active" if f.get("task_tab_active") else "other window") if f else "--",
+                "Distraction score": f"{self.score:.2f}",
+            }
+            alarming = {("Phone in view", "YES"), ("Face visible", "no"), ("Task window", "other window")}
+            for name, text in values.items():
+                self.demo_tiles[name].configure(text=text, fg=RED if (name, text) in alarming else INK)
+            self.draw_demo_timeline()
+        except tk.TclError:
+            self.demo_win = None
+
+    def draw_demo_timeline(self) -> None:
+        canvas = self.demo_canvas
+        canvas.delete("all")
+        width, height = canvas.winfo_width(), canvas.winfo_height()
+        if width <= 1 or not self.score_history:
+            return
+        pad = 10
+        start = self.score_history[-1][0] - 60
+
+        def xy(t, value):
+            return (pad + (t - start) / 60 * (width - 2 * pad),
+                    height - pad - value * (height - 2 * pad))
+
+        threshold_y = xy(start, 0.55)[1]
+        canvas.create_line(pad, threshold_y, width - pad, threshold_y, fill=MUTE, dash=(6, 4))
+        for t, _reason in self.alert_events:
+            if t >= start:
+                x = xy(t, 0)[0]
+                canvas.create_line(x, pad, x, height - pad, fill=RED, width=2)
+        points = [coord for t, value in self.score_history if t >= start for coord in xy(t, value)]
+        if len(points) >= 4:
+            canvas.create_line(*points, fill="#3987e5", width=3)
 
     # ------------------------------------------------------------ tab / input
     def update_tab_metrics(self, title: str, allowed: bool, now: float) -> None:
@@ -982,12 +1161,14 @@ class FocusGuard(tk.Tk):
             "sensitivity": round(float(self._num(self.sensitivity, 1.0)), 2),
             "calibration_seconds": self._num(self.calibration_seconds, 10),
             "break_minutes": self._num(self.break_minutes, 5),
+            "record_demos": bool(self.record_demos.get()),
             "geometry": self.geometry(),
         })
 
     def close(self) -> None:
         self.save_settings()
         self.logger.stop()
+        self.demo_log.stop()
         self.running = False
         for worker in (self.vision, self.screen):
             try:

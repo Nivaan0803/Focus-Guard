@@ -10,8 +10,8 @@ Two interchangeable back ends:
 * ``SklearnTree`` - a trained ``DecisionTreeClassifier`` loaded from
   ``models/distraction_tree.joblib`` (produced by ``train_model.py``).
 * ``HeuristicTree`` - a small transparent decision tree used whenever
-  scikit-learn or a trained model file is missing, using the shared
-  ``LOOK_AWAY_LIMITS`` so it agrees with the camera overlay.
+  scikit-learn or a trained model file is missing. It reproduces the original
+  hard-coded thresholds, so behaviour is unchanged with zero setup.
 
 Only ``load_model`` touches the disk, and only to read an existing model file.
 """
@@ -36,11 +36,6 @@ FEATURE_NAMES: Tuple[str, ...] = (
 )
 
 MODEL_PATH = Path(__file__).resolve().parent / "models" / "distraction_tree.joblib"
-
-# Head pitch (deg), head yaw (deg), iris offset beyond which the user counts as
-# looking away. Deliberately lenient: small head turns while still reading the
-# screen also shift the iris the other way, so tight limits flag normal motion.
-LOOK_AWAY_LIMITS: Tuple[float, float, float] = (28.0, 35.0, 0.25)
 
 FOCUSED = "focused"
 DISTRACTED = "distracted"
@@ -98,29 +93,41 @@ def feature_row(features: Dict[str, float]) -> List[float]:
     return [float(features.get(name, 0.0)) for name in FEATURE_NAMES]
 
 
-class HeuristicTree:
-    """Readable fallback tree; mirrors the app's original threshold logic."""
+SIGNAL_GROUPS: Tuple[str, ...] = ("phone", "tab", "camera")
 
-    name = "built-in heuristic tree"
+
+class HeuristicTree:
+    """Readable fallback tree; mirrors the app's original threshold logic.
+
+    ``signals`` limits which rule groups are consulted ("phone", "tab",
+    "camera"). The app always uses all three; ``evaluate_model.py`` builds
+    single-signal versions as baselines to show what each signal adds.
+    """
+
+    def __init__(self, signals=SIGNAL_GROUPS) -> None:
+        self.signals = frozenset(signals)
+        if self.signals == frozenset(SIGNAL_GROUPS):
+            self.name = "built-in heuristic tree"
+        else:
+            self.name = " + ".join(s for s in SIGNAL_GROUPS if s in self.signals) + " only"
 
     def predict(self, features: Dict[str, float]) -> Prediction:
-        if features.get("phone_present"):
+        if "phone" in self.signals and features.get("phone_present"):
             return DISTRACTED, 0.90, "phone in view"
 
-        if not features.get("task_tab_active", 1.0):
+        if "tab" in self.signals and not features.get("task_tab_active", 1.0):
             return DISTRACTED, 0.80, "non-task window active"
 
-        if features.get("calibrated"):
+        if "camera" in self.signals and features.get("calibrated"):
             if not features.get("face_visible"):
                 return DISTRACTED, 0.70, "face not visible"
             pitch = abs(features.get("head_pitch", 0.0))
             yaw = abs(features.get("head_yaw", 0.0))
             iris = abs(features.get("iris_delta", 0.0))
-            pitch_limit, yaw_limit, iris_limit = LOOK_AWAY_LIMITS
-            if pitch > pitch_limit or yaw > yaw_limit or iris > iris_limit:
+            if pitch > 18 or yaw > 22 or iris > 0.18:
                 return DISTRACTED, 0.75, "looking away from screen"
 
-        if features.get("tab_switches_per_min", 0.0) >= 15:
+        if "tab" in self.signals and features.get("tab_switches_per_min", 0.0) >= 15:
             return DISTRACTED, 0.55, "rapid tab switching"
 
         return FOCUSED, 0.65, "on task"
