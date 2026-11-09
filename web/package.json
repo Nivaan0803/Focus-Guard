@@ -1,0 +1,10 @@
+{
+  "name": "focus-guard-web",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Participant-facing study app and showcase for the FocusGuard project.",
+  "type": "module",
+  "dependencies": {
+    "@vercel/postgres": "0.10.0"
+  }
+}

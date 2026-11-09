@@ -1,0 +1,6 @@
+# The consent form carries the student researcher's name and the adult
+# sponsor's work email. It is meant to be handed to participants, not indexed.
+User-agent: *
+Disallow: /consent/
+Disallow: /study
+Disallow: /api/

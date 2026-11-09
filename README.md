@@ -184,3 +184,96 @@ data. (Explicitly labelling it also stops `train_model.py` from reading these
 rows as "focused" if they ever get globbed in by mistake.) Pass the index to a
 spreadsheet for booth statistics — "n demos, median length, alert rate" — or a
 single demo CSV to the same plotting as a session log.
+
+## Web app: participant data collection (`web/`)
+
+The desktop app cannot be deployed to a server — it needs a local webcam, the
+Windows active-window title, global input hooks, and a Tk window. But
+participants should not have to install Python to take part in the study, so
+`web/` is a **static site** that runs the detector in the participant's own
+browser via MediaPipe Tasks for Web, pinned to `0.10.21` — the same MediaPipe
+version as `requirements.txt`.
+
+| Route | What it is |
+| --- | --- |
+| `/` | Showcase: how the fusion works, what the browser can and cannot see, results |
+| `/study` | The data gatherer: consent + signature → calibrate → arithmetic task → upload |
+| `/demo` | Booth demo: the live detector, recording nothing |
+| `/selftest` | Asserts the JavaScript ports match the Python, against values in `data/parity.json` |
+
+No Python runs on the server, and no video, screenshot, or window title ever
+leaves the participant's device — only the derived numbers.
+
+### Consent gate
+
+`/study` opens on the ISEF informed-consent form
+(`web/consent/isef-informed-consent-v1.pdf`), captures a drawn signature
+(plus a parent's, for under-18s), and blocks the camera and all recording until
+it is signed. The signed PDF is generated **in the browser** and downloads to
+that device; only a non-identifying *receipt* (participant code, form version,
+timestamp, signature hash) is uploaded. The dataset therefore stays
+de-identified while a reviewer can still confirm that a given code consented to
+a given form version.
+
+ISEF requires the researcher to keep the original signed form, so run sessions
+on the researcher's own laptop where the download lands, or collect the PDFs
+from remote participants by hand.
+
+Edit `web/consent/consent.json` to change the wording, and **bump its `version`
+whenever the form changes** — that string is stored with every receipt.
+
+### Parity with the desktop app
+
+These are direct ports, and `/selftest` checks them:
+
+| Ported from | To |
+| --- | --- |
+| `distraction_model.py` `HeuristicTree`, `_decision_reason` | `web/lib/tree.js` |
+| `vision_worker.py` `iris_position`, `eye_openness` | `web/lib/features.js` |
+| `vision_worker.py` `_advance_calibration` | `web/lib/calibrate.js` |
+| `main.py:605-613`, `main.py:670-683` | `web/lib/score.js` |
+| `focus_study.py` `make_problem` and the task loop | `web/study/` |
+
+Two deliberate differences, both documented in the source: head pose comes from
+MediaPipe's facial transformation matrix rather than `cv2.solvePnP` (valid
+because the feature is a delta from the calibrated neutral pose, but **verify
+the scale side by side before collecting data**), and the problem sequence uses
+a different PRNG, so browser and desktop study rows should not be pooled as
+though participants saw identical problems.
+
+### Exported data drops into the existing scripts
+
+`/api/export` emits CSVs byte-compatible with the desktop writers:
+
+```
+GET /api/export?kind=study                    -> focus_study.py:45-46   -> analyze_study.py
+GET /api/export?kind=features&participant=P01 -> session_logger.py:18   -> train_model.py
+GET /api/export?kind=consent                  -> the consent registry
+```
+
+Authenticate with `Authorization: Bearer $EXPORT_TOKEN`.
+
+### Deploying
+
+Import the repo at vercel.com → Framework Preset **Other** → **Root Directory
+`web`** → Build Command empty. Root Directory `web` is what keeps the `.py`
+source from being served as static text.
+
+The database is optional: without one, `/api/submit` returns a clear
+"not configured" and the participant can download their session as CSV instead.
+To enable it, add Vercel Postgres in the Storage tab, run `web/api/schema.sql`,
+set `EXPORT_TOKEN`, and redeploy.
+
+Test locally with `python -m http.server 8000 --directory web`
+(`localhost` counts as a secure context, so the camera works; the `/api` routes
+will not run without the Vercel CLI, and the CSV fallback covers that).
+
+### Optional: use a trained tree in the browser
+
+```powershell
+python train_model.py focus_session*.csv   # writes models/distraction_tree.joblib
+python export_tree_json.py                 # writes web/data/distraction_tree.json
+```
+
+Without that file the web app uses the built-in heuristic tree, exactly as the
+desktop app does.

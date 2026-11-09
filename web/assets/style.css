@@ -1,0 +1,191 @@
+/* Palette ported verbatim from main.py:43-58 so the web app and the desktop
+   app read as one product. */
+:root {
+  --bg: #0f1420;
+  --card: #1a2230;
+  --field: #232d3d;
+  --ink: #e8edf4;
+  --mute: #8b98ab;
+  --green: #35b17e;
+  --amber: #e0a13a;
+  --red: #e0574a;
+
+  --banner-idle: #2c3a4f;
+  --banner-good: #1f7a4e;
+  --banner-warn: #8a6320;
+  --banner-bad: #a03a30;
+  --banner-pause: #3a4a63;
+
+  --line: #2b3648;
+  --radius: 12px;
+  --maxw: 880px;
+  --gutter: 16px;
+
+  --sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "Cascadia Code", "Consolas", monospace;
+}
+
+/* The desktop app is dark-only; light mode here is for judges reading the
+   showcase on a projector or a phone in sunlight. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f4f6fa;
+    --card: #ffffff;
+    --field: #eef1f6;
+    --ink: #141b26;
+    --mute: #5a6678;
+    --line: #d8dee8;
+    --banner-idle: #c9d3e2;
+    --banner-pause: #c2cdde;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f4f6fa;
+  --card: #ffffff;
+  --field: #eef1f6;
+  --ink: #141b26;
+  --mute: #5a6678;
+  --line: #d8dee8;
+  --banner-idle: #c9d3e2;
+  --banner-pause: #c2cdde;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.55;
+  overflow-x: hidden;
+}
+
+.wrap {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+
+h1, h2, h3 { line-height: 1.2; margin: 0 0 .5em; }
+h1 { font-size: clamp(1.75rem, 5vw, 2.6rem); letter-spacing: -.02em; }
+h2 { font-size: clamp(1.25rem, 3.5vw, 1.6rem); margin-top: 2em; }
+h3 { font-size: 1.05rem; }
+p { margin: 0 0 1em; }
+a { color: var(--green); }
+
+.muted { color: var(--mute); }
+.small { font-size: .875rem; }
+.mono { font-family: var(--mono); }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin: 0 0 16px;
+}
+
+/* ---- buttons ---- */
+button, .btn {
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 12px 20px;
+  min-height: 44px;            /* touch target */
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--field);
+  color: var(--ink);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+button:hover:not(:disabled), .btn:hover { border-color: var(--mute); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primary, .btn.primary {
+  background: var(--green);
+  border-color: var(--green);
+  color: #06281c;
+}
+button.danger { background: var(--red); border-color: var(--red); color: #fff; }
+button:focus-visible, .btn:focus-visible, input:focus-visible, canvas:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+/* ---- inputs ---- */
+label { display: block; font-weight: 600; margin: 0 0 6px; }
+input[type="text"], input[type="number"], select {
+  font-family: inherit;
+  font-size: 1rem;
+  padding: 11px 12px;
+  min-height: 44px;
+  width: 100%;
+  background: var(--field);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--green); flex: none; }
+
+.check {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 0 0 14px;
+}
+.check label { font-weight: 400; margin: 0; }
+
+/* ---- banner (mirrors main.py BANNER states) ---- */
+.banner {
+  background: var(--banner-idle);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  font-weight: 700;
+}
+.banner.good  { background: var(--banner-good); }
+.banner.warn  { background: var(--banner-warn); }
+.banner.bad   { background: var(--banner-bad); }
+.banner.pause { background: var(--banner-pause); }
+
+/* ---- distraction meter (mirrors main.py:608-612) ---- */
+.meter {
+  height: 14px;
+  background: var(--field);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.meter > span {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--green);
+  transition: width .09s linear, background .2s linear;
+}
+
+.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.grow { flex: 1 1 200px; }
+
+table { width: 100%; border-collapse: collapse; font-size: .9375rem; }
+th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+th { color: var(--mute); font-weight: 600; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+.hidden { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

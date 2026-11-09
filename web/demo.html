@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FocusGuard Demo</title>
+<meta name="description" content="Live in-browser demo of the FocusGuard distraction detector.">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .stage { position: relative; background: #000; border-radius: var(--radius);
+           overflow: hidden; aspect-ratio: 16 / 9; }
+  .stage video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; }
+  .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #verdict { font-size: clamp(1.5rem, 6vw, 2.6rem); letter-spacing: .04em; text-align: center; }
+  .sigs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  @media (min-width: 640px) { .sigs { grid-template-columns: repeat(4, 1fr); } }
+  .sigs div { background: var(--field); border-radius: 10px; padding: 10px 12px; }
+  .sigs b { display: block; font-size: .72rem; text-transform: uppercase;
+            letter-spacing: .05em; color: var(--mute); }
+  .sigs span { font-family: var(--mono); font-size: 1.05rem; }
+</style>
+</head>
+<body>
+<main class="wrap" style="padding-top:28px;padding-bottom:48px">
+  <h1>Live demo</h1>
+  <p class="muted">This runs the detector on your own webcam, in this browser.
+     No video is uploaded, stored, or seen by anyone. Nothing is recorded.</p>
+
+  <div class="card" id="intro">
+    <p>You will be asked for camera permission. Then calibrate by sitting
+       normally and looking at the screen &mdash; not at the camera &mdash; for
+       ten seconds.</p>
+    <button class="primary" id="start">Start the demo</button>
+    <p class="small muted" id="err" style="margin:14px 0 0"></p>
+  </div>
+
+  <div id="live" class="hidden">
+    <p class="banner" id="verdict">Starting&hellip;</p>
+    <div class="meter" style="margin:12px 0 16px"><span id="meter"></span></div>
+    <div class="stage">
+      <video id="cam" playsinline muted></video>
+      <canvas id="overlay"></canvas>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="sigs">
+        <div><b>Head pitch</b><span id="s-pitch">&mdash;</span></div>
+        <div><b>Head yaw</b><span id="s-yaw">&mdash;</span></div>
+        <div><b>Iris offset</b><span id="s-iris">&mdash;</span></div>
+        <div><b>Eye openness</b><span id="s-open">&mdash;</span></div>
+        <div><b>Face</b><span id="s-face">&mdash;</span></div>
+        <div><b>Phone</b><span id="s-phone">&mdash;</span></div>
+        <div><b>This tab</b><span id="s-tab">&mdash;</span></div>
+        <div><b>Score</b><span id="s-score">&mdash;</span></div>
+      </div>
+      <p class="small muted" style="margin:14px 0 0" id="model"></p>
+      <div class="row" style="margin-top:12px">
+        <button id="recal">Recalibrate</button>
+        <button id="stop">Stop and release the camera</button>
+      </div>
+    </div>
+  </div>
+
+  <p style="margin-top:28px"><a href="/">&larr; Back</a></p>
+</main>
+<canvas id="work" style="display:none" aria-hidden="true"></canvas>
+<script type="module" src="assets/demo.js"></script>
+</body>
+</html>

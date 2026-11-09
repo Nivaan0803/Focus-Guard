@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Focus Study</title>
+<meta name="description" content="Participant session for the FocusGuard focus study.">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  /* The task view is deliberately plain: nothing on screen should compete
+     with the arithmetic for attention, because attention is the measure. */
+  #task { text-align: center; padding: 6vh 0 4vh; }
+  #problem { font-size: clamp(2.5rem, 12vw, 4.5rem); font-weight: 700; margin: 0 0 24px; }
+  #answer {
+    font-size: clamp(1.5rem, 7vw, 2rem); width: 100%; max-width: 220px;
+    margin: 0 auto; text-align: center;
+  }
+  #feedback { min-height: 2em; font-size: 1.1rem; margin-top: 14px; }
+  #feedback.right { color: var(--green); }
+  #feedback.wrong { color: var(--red); }
+  #clock { font-variant-numeric: tabular-nums; color: var(--mute); margin-top: 18px; }
+  #cam { position: fixed; right: 12px; bottom: 12px; width: 150px; border-radius: 10px;
+         border: 1px solid var(--line); transform: scaleX(-1); z-index: 5; background: #000; }
+  #cam.hidden { display: none; }
+  .stack { display: grid; gap: 10px; }
+</style>
+</head>
+<body>
+<main id="app" aria-live="polite">
+  <div class="wrap" style="padding-top:40px">
+    <div class="card"><p class="muted">Loading&hellip;</p></div>
+  </div>
+</main>
+<video id="cam" class="hidden" playsinline muted aria-label="Your webcam preview"></video>
+<canvas id="work" class="hidden" aria-hidden="true" style="display:none"></canvas>
+<script type="module" src="study/flow.js"></script>
+</body>
+</html>

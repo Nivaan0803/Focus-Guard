@@ -6,14 +6,20 @@ __pycache__/
 exportToHTML/
 
 # Local preferences (window geometry, task phrase, camera index)
-settings.json
+/settings.json
 
 # Recorded data — stays on the machine that made it.
-# study/ may contain human-subjects data and must never be published.
-session_history.csv
-session_charts/
-demo_logs/
-study/
-focus_session*.csv
-models/*.joblib
-models/*.png
+# /study/ may contain human-subjects data and must never be published.
+# These are anchored with a leading slash so they match only the repo root:
+# unanchored "study/" also matched web/study/, silently dropping app code.
+/session_history.csv
+/session_charts/
+/demo_logs/
+/study/
+/focus_session*.csv
+/models/*.joblib
+/models/*.png
+
+# Web app
+web/node_modules/
+.vercel

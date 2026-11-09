@@ -1,0 +1,28 @@
+{
+  "version": "isef-v1-2026-11-03",
+  "title": "Consent to take part in this study",
+  "pdf": "consent/isef-informed-consent-v1.pdf",
+  "pdfPresent": true,
+  "minorAgeThreshold": 18,
+  "requireParentSignature": "ifMinor",
+  "studyTitle": "FocusGuard: An Analysis of Real-Time Visual Distraction Detection Through Webcam-Based Gaze and Facial Landmark Tracking Using Heuristic and Decision Trees",
+  "researcher": "Nivaan Debnath",
+  "sponsor": "Punam Singh",
+  "sponsorContact": "PunamKSingh@Katyisd.org",
+  "_note": "Summary text below is paraphrased FROM the attached ISEF form so the on-screen wording and the signed PDF cannot drift apart. If you edit the PDF, edit these lines and bump `version` — the version string is stored with every consent receipt, so revising the form without bumping it makes older receipts unattributable.",
+  "summary": [
+    "Purpose: to test whether FocusGuard can use a regular computer webcam to detect signs of distraction, such as looking away from the screen or looking at a phone, and whether alerts help you focus.",
+    "You will complete timed computer tasks while FocusGuard uses your webcam to track your head position and eye movements.",
+    "Time required: about 40-45 minutes, including setup, testing, and breaks.",
+    "Possible risks: eye strain from using a computer, frustration from alerts or automatic pauses, and privacy concerns from using a webcam. You can take breaks or stop at any time.",
+    "Benefits: there may be no direct benefit to you. The results could help show whether FocusGuard can detect visual distractions and help people reduce phone use while working.",
+    "Confidentiality: you are given a code instead of your name. Your webcam video never leaves this device - no image, video, or screenshot is uploaded or stored. The page turns each frame into a few numbers, such as how far your head is turned, and then discards the frame. Only those numbers, your task scores, and your code are sent to the researcher.",
+    "Participation is completely voluntary. If you decide not to take part there will be no negative consequences, and you may stop at any time or skip any question."
+  ],
+  "statements": [
+    "I have read and understand the information above and the attached consent form.",
+    "I understand my webcam video stays on this device and is never uploaded.",
+    "I understand participation is voluntary and I can stop at any time without giving a reason.",
+    "I freely give my consent or assent to participate, or permission for my child to participate."
+  ]
+}

@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FocusGuard</title>
+<meta name="description" content="An on-device webcam focus detector: head pose, gaze, phone presence and window context fused through a decision tree.">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .hero { padding: 7vh 0 3vh; }
+  .hero h1 { margin-bottom: .3em; }
+  .lede { font-size: 1.15rem; color: var(--mute); max-width: 60ch; }
+  .pipe { display: grid; gap: 10px; grid-template-columns: 1fr; margin: 6px 0 0; }
+  @media (min-width: 720px) { .pipe { grid-template-columns: repeat(3, 1fr); } }
+  .sig { background: var(--field); border-radius: 10px; padding: 12px 14px; }
+  .sig b { display: block; font-size: .8rem; text-transform: uppercase;
+           letter-spacing: .05em; color: var(--mute); }
+  .yes { color: var(--green); font-weight: 600; }
+  .part { color: var(--amber); font-weight: 600; }
+  .no  { color: var(--red); font-weight: 600; }
+  footer { margin: 48px 0 32px; color: var(--mute); font-size: .875rem; }
+</style>
+</head>
+<body>
+<main>
+<div class="wrap">
+
+  <header class="hero">
+    <h1>FocusGuard</h1>
+    <p class="lede">An on-device focus detector. It watches head pose, gaze,
+       phone presence and window context through a regular webcam, fuses them
+       in a decision tree, and tells you when you have been distracted longer
+       than you chose to allow.</p>
+    <div class="row" style="margin-top:22px">
+      <a class="btn primary" href="demo.html">Try the live demo</a>
+      <a class="btn" href="https://github.com/Nivaan0803/Focus-Guard">View the code</a>
+    </div>
+    <p class="small muted" style="margin-top:14px">
+      The demo runs entirely in your browser. No video is uploaded or stored.
+    </p>
+  </header>
+
+  <h2>How it works</h2>
+  <p>Every tick the app builds one feature vector from all of its signals and
+     passes it through a single decision tree that outputs
+     <span class="mono">focused</span> or <span class="mono">distracted</span>
+     plus a short reason. That one decision drives the alert, instead of several
+     separate threshold checks.</p>
+
+  <div class="pipe">
+    <div class="sig"><b>Camera</b>Head pitch and yaw from facial landmarks,
+      iris offset within the eyes, eye openness, and whether a face is visible
+      at all.</div>
+    <div class="sig"><b>Context</b>Whether your task window is in front, how
+      often you switch, how long you have been on the current one, and keyboard
+      and mouse idle time.</div>
+    <div class="sig"><b>Phone</b>A separate, independently trained EfficientDet
+      object detector looking only for a cell phone.</div>
+  </div>
+
+  <p style="margin-top:18px">The thresholds are not fixed in advance. Calibration
+     watches you work normally for ten seconds and sets your neutral head pose
+     from the <em>median</em> of that baseline and your look-away thresholds
+     from its <em>spread</em>, so someone who sits very still gets tighter
+     thresholds than someone who fidgets. A leaky score smooths the per-tick
+     verdict, so one noisy frame never raises an alert.</p>
+
+  <h2>What the browser version can and cannot see</h2>
+  <p>The desktop app reads signals from Windows itself. A web page cannot, and
+     pretending otherwise would misstate what the demo measures. Six of the
+     twelve features are identical, five are honest substitutes, and one is
+     impossible.</p>
+
+  <div class="card">
+    <table>
+      <tr><th>Feature</th><th>In the browser</th><th>How</th></tr>
+      <tr><td class="mono">face_visible</td><td class="yes">identical</td><td>Face landmarker</td></tr>
+      <tr><td class="mono">head_pitch</td><td class="yes">identical</td><td>Facial transformation matrix</td></tr>
+      <tr><td class="mono">head_yaw</td><td class="yes">identical</td><td>Facial transformation matrix</td></tr>
+      <tr><td class="mono">iris_delta</td><td class="yes">identical</td><td>Iris landmarks 468 / 473</td></tr>
+      <tr><td class="mono">eye_openness</td><td class="yes">identical</td><td>Eyelid distance ratio</td></tr>
+      <tr><td class="mono">phone_present</td><td class="yes">identical</td><td>The same EfficientDet model file</td></tr>
+      <tr><td class="mono">task_tab_active</td><td class="part">substitute</td><td>Whether <em>this tab</em> is focused, not your task window</td></tr>
+      <tr><td class="mono">tab_switches_per_min</td><td class="part">substitute</td><td>Visibility changes on this tab only</td></tr>
+      <tr><td class="mono">time_on_current_tab</td><td class="part">substitute</td><td>Time since the last visibility change</td></tr>
+      <tr><td class="mono">keyboard_inactivity</td><td class="part">substitute</td><td>Key presses on this page only, not system-wide</td></tr>
+      <tr><td class="mono">mouse_inactivity</td><td class="part">substitute</td><td>Pointer movement on this page only</td></tr>
+      <tr><td>window titles</td><td class="no">impossible</td><td>No browser API exposes other windows' titles</td></tr>
+    </table>
+  </div>
+
+  <p class="small muted">The features that need cross-person validation &mdash;
+     the camera ones &mdash; are exactly the ones that run identically. The
+     substituted signals do not depend on a person's face, so they are not what
+     leave-one-person-out is testing.</p>
+
+  <h2>Results</h2>
+  <div id="validation"></div>
+
+  <h2>Run the full version</h2>
+  <p>The desktop app is Windows-only and reads signals a browser cannot. It
+     processes frames in RAM and never writes them to disk.</p>
+  <div class="card">
+<pre class="mono small" style="margin:0;overflow-x:auto"># Windows PowerShell
+git clone https://github.com/Nivaan0803/Focus-Guard
+cd Focus-Guard
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python main.py</pre>
+  </div>
+
+  <h2>Limits</h2>
+  <p>Looking away is a proxy, not a measurement of attention. It can misclassify
+     note-taking, legitimate breaks, accessibility-related movement, and
+     off-screen work. It is built for voluntary self-management, never
+     surveillance or discipline. Phone detection has its own separate failure
+     modes &mdash; dark scenes, glare, an obscured or face-down phone &mdash;
+     and those errors do not carry into the gaze and pose figures.</p>
+
+  <footer>
+    <p>A student science-fair project. Source on
+       <a href="https://github.com/Nivaan0803/Focus-Guard">GitHub</a>, MIT licensed.</p>
+  </footer>
+
+</div>
+</main>
+<script type="module">
+  import { renderValidation } from "./assets/charts.js";
+  renderValidation(document.getElementById("validation"));
+</script>
+</body>
+</html>

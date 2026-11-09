@@ -1,0 +1,312 @@
+{
+ "_note": "Generated from the Python implementations by a one-off script. selftest.html asserts the JavaScript ports reproduce these exactly.",
+ "tree_cases": [
+  {
+   "features": {
+    "phone_present": 1,
+    "task_tab_active": 1,
+    "calibrated": 1,
+    "face_visible": 1
+   },
+   "expect": [
+    "distracted",
+    0.9,
+    "phone in view"
+   ]
+  },
+  {
+   "features": {
+    "phone_present": 0,
+    "task_tab_active": 0,
+    "calibrated": 1,
+    "face_visible": 1
+   },
+   "expect": [
+    "distracted",
+    0.8,
+    "non-task window active"
+   ]
+  },
+  {
+   "features": {
+    "phone_present": 0,
+    "task_tab_active": 1,
+    "calibrated": 1,
+    "face_visible": 0
+   },
+   "expect": [
+    "distracted",
+    0.7,
+    "face not visible"
+   ]
+  },
+  {
+   "features": {
+    "phone_present": 0,
+    "task_tab_active": 1,
+    "calibrated": 1,
+    "face_visible": 1,
+    "head_yaw": 25.0
+   },
+   "expect": [
+    "distracted",
+    0.75,
+    "looking away from screen"
+   ]
+  },
+  {
+   "features": {
+    "phone_present": 0,
+    "task_tab_active": 1,
+    "calibrated": 1,
+    "face_visible": 1,
+    "head_pitch": 19.0
+   },
+   "expect": [
+    "distracted",
+    0.75,
+    "looking away from screen"
+   ]
+  },
+  {
+   "features": {
+    "phone_present": 0,
+    "task_tab_active": 1,
+    "calibrated": 1,
+    "face_visible": 1,
+    "iris_delta": 0.19
+   },
+   "expect": [
+    "distracted",
+    0.75,
+    "looking away from screen"
+   ]
+  },
+  {
+   "features": {
+    "phone_present": 0,
+    "task_tab_active": 1,
+    "calibrated": 1,
+    "face_visible": 1,
+    "head_yaw": 22.0
+   },
+   "expect": [
+    "focused",
+    0.65,
+    "on task"
+   ]
+  },
+  {
+   "features": {
+    "phone_present": 0,
+    "task_tab_active": 1,
+    "calibrated": 0,
+    "face_visible": 0,
+    "head_yaw": 90.0
+   },
+   "expect": [
+    "focused",
+    0.65,
+    "on task"
+   ]
+  },
+  {
+   "features": {
+    "phone_present": 0,
+    "task_tab_active": 1,
+    "tab_switches_per_min": 15
+   },
+   "expect": [
+    "distracted",
+    0.55,
+    "rapid tab switching"
+   ]
+  },
+  {
+   "features": {
+    "phone_present": 0,
+    "task_tab_active": 1,
+    "tab_switches_per_min": 14
+   },
+   "expect": [
+    "focused",
+    0.65,
+    "on task"
+   ]
+  },
+  {
+   "features": {},
+   "expect": [
+    "focused",
+    0.65,
+    "on task"
+   ]
+  }
+ ],
+ "landmarks": {
+  "33": [
+   0.3,
+   0.5
+  ],
+  "133": [
+   0.42,
+   0.5
+  ],
+  "468": [
+   0.38,
+   0.5
+  ],
+  "362": [
+   0.58,
+   0.5
+  ],
+  "263": [
+   0.7,
+   0.5
+  ],
+  "473": [
+   0.66,
+   0.5
+  ],
+  "159": [
+   0.36,
+   0.4885
+  ],
+  "145": [
+   0.36,
+   0.5115
+  ],
+  "386": [
+   0.64,
+   0.489
+  ],
+  "374": [
+   0.64,
+   0.511
+  ]
+ },
+ "iris_expected": 0.1666666666666673,
+ "openness_expected": 0.5859374999999998,
+ "calibration": {
+  "pitch_samples": [
+   1.0,
+   2.0,
+   3.0,
+   2.5,
+   1.5,
+   2.2,
+   1.8,
+   2.1,
+   2.4,
+   1.9,
+   1.0,
+   2.0,
+   3.0,
+   2.5,
+   1.5,
+   2.2,
+   1.8,
+   2.1,
+   2.4,
+   1.9,
+   1.0,
+   2.0,
+   3.0,
+   2.5,
+   1.5,
+   2.2,
+   1.8,
+   2.1,
+   2.4,
+   1.9
+  ],
+  "yaw_samples": [
+   -1.0,
+   0.5,
+   1.2,
+   -0.3,
+   0.8,
+   0.1,
+   -0.6,
+   0.9,
+   0.4,
+   -0.2,
+   -1.0,
+   0.5,
+   1.2,
+   -0.3,
+   0.8,
+   0.1,
+   -0.6,
+   0.9,
+   0.4,
+   -0.2,
+   -1.0,
+   0.5,
+   1.2,
+   -0.3,
+   0.8,
+   0.1,
+   -0.6,
+   0.9,
+   0.4,
+   -0.2
+  ],
+  "iris_samples": [
+   0.01,
+   -0.02,
+   0.015,
+   0.0,
+   -0.01,
+   0.02,
+   -0.005,
+   0.012,
+   -0.018,
+   0.008,
+   0.01,
+   -0.02,
+   0.015,
+   0.0,
+   -0.01,
+   0.02,
+   -0.005,
+   0.012,
+   -0.018,
+   0.008,
+   0.01,
+   -0.02,
+   0.015,
+   0.0,
+   -0.01,
+   0.02,
+   -0.005,
+   0.012,
+   -0.018,
+   0.008
+  ],
+  "neutral": [
+   2.05,
+   0.25
+  ],
+  "neutral_iris": 0.004,
+  "thresholds": [
+   13.833412119519231,
+   17.341602015714884,
+   0.17647555941848103
+  ]
+ },
+ "score_sequence": [
+  0.45,
+  0.6975,
+  0.8336250000000001,
+  0.90849375,
+  0.9496715625,
+  0.972319359375,
+  0.7973018746875,
+  0.65378753724375,
+  0.536105780539875,
+  0.4396067400426975,
+  0.36047752683501194,
+  0.2955915720047098
+ ]
+}

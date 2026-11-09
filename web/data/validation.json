@@ -1,0 +1,21 @@
+{
+  "_note": "Fill these in from YOUR OWN runs of train_model.py, evaluate_model.py and analyze_study.py. Every value starts null on purpose: charts.js renders 'not yet measured' for anything still null, so the public page can never show a number you have not actually measured. Do not estimate.",
+  "updated": null,
+  "detector": {
+    "out_of_fold_accuracy": null,
+    "n_rows": null,
+    "n_sessions": null,
+    "confusion": { "tp": null, "fp": null, "fn": null, "tn": null }
+  },
+  "leave_one_person_out": [],
+  "baselines": {
+    "full_model": null,
+    "phone_only": null,
+    "tab_only": null,
+    "camera_only": null
+  },
+  "study": {
+    "n_participants": null,
+    "measures": []
+  }
+}
