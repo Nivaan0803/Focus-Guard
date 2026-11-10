@@ -463,8 +463,10 @@ async function done(session, result, selfRating) {
     ? `consent_${session.participant}_${cfg.version}.pdf`
     : null;
   const contact = (cfg && cfg.sponsorContact) || null;
+  // encodeURI, not encodeURIComponent: the latter escapes "@" to "%40", which
+  // RFC 6068 does not want in a mailto addr-spec and some clients mishandle.
   const mailto = contact
-    ? `mailto:${encodeURIComponent(contact)}`
+    ? `mailto:${encodeURI(contact)}`
       + `?subject=${encodeURIComponent(`FocusGuard signed consent - ${session.participant}`)}`
     : null;
 
