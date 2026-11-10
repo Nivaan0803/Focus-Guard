@@ -15,7 +15,7 @@
  * feature rows from half the sessions; the comparison is worth more.
  */
 
-import { gate } from "../lib/consent.js";
+import { gate, consentConfig } from "../lib/consent.js";
 import * as vision from "../lib/vision.js";
 import { cameraFeatures, poseFromMatrix, irisPosition } from "../lib/features.js";
 import { Calibration } from "../lib/calibrate.js";
@@ -448,6 +448,40 @@ async function done(session, result, selfRating) {
     },
   };
 
+  // The consent PDF never leaves the participant's device - only a
+  // de-identified receipt is uploaded - but the study records require the
+  // original signed form, so ask for it here. Non-fatal if the config will not
+  // load: the results still upload, the participant just gets generic wording.
+  let cfg = null;
+  try {
+    cfg = await consentConfig();
+  } catch {
+    /* the gate already loaded this once; a failure here is not worth blocking on */
+  }
+
+  const pdfName = cfg && cfg.version
+    ? `consent_${session.participant}_${cfg.version}.pdf`
+    : null;
+  const contact = (cfg && cfg.sponsorContact) || null;
+  const mailto = contact
+    ? `mailto:${encodeURIComponent(contact)}`
+      + `?subject=${encodeURIComponent(`FocusGuard signed consent - ${session.participant}`)}`
+    : null;
+
+  const consentReturn = `
+    <div class="card">
+      <h3>Please send your signed consent form</h3>
+      <p class="small">When you signed, a copy
+         ${pdfName ? `named <span class="mono">${esc(pdfName)}</span>` : ""}
+         was downloaded to this device. It was <strong>not</strong> uploaded with
+         your results, and the study records need that original signed form.</p>
+      <p class="small">Please email it to
+         ${mailto
+           ? `<a href="${esc(mailto)}">${esc(contact)}</a>`
+           : "the researcher"}.</p>
+      <p class="small muted">Look in your Downloads folder if you cannot find it.</p>
+    </div>`;
+
   const $ = view(`
     <h1>Thank you</h1>
     <div class="card">
@@ -457,6 +491,7 @@ async function done(session, result, selfRating) {
          for ${esc(result.secondsAway.toFixed(1))} seconds in total.</p>
       <p id="status" class="muted">Sending&hellip;</p>
     </div>
+    ${consentReturn}
     <div class="card">
       <h3>Keep a copy</h3>
       <p class="small muted">If anything went wrong with the upload, download these

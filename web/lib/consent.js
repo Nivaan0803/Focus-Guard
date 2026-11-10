@@ -119,11 +119,22 @@ export async function flushConsentQueue() {
   }
 }
 
+let configCache = null;
+
 async function loadConfig() {
+  if (configCache) return configCache;
   const res = await fetch("consent/consent.json", { cache: "no-cache" });
   if (!res.ok) throw new Error("Could not load the consent form configuration.");
-  return res.json();
+  configCache = await res.json();
+  return configCache;
 }
+
+/* The signed PDF only ever exists on the participant's own device, so the
+ * completion screen has to tell them where to send it. Exported so that
+ * address is read from consent.json rather than duplicated in the study flow:
+ * editing the form's contact in one place updates both. Cached above, so this
+ * costs no extra request after the gate has already loaded it. */
+export { loadConfig as consentConfig };
 
 function template(cfg) {
   const summary = cfg.summary.map((s) => `<li>${esc(s)}</li>`).join("");
