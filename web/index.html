@@ -117,6 +117,14 @@ python main.py</pre>
      surveillance or discipline. Phone detection has its own separate failure
      modes &mdash; dark scenes, glare, an obscured or face-down phone &mdash;
      and those errors do not carry into the gaze and pose figures.</p>
+  <p>Someone can also stare straight at the screen while thinking about
+     something else entirely, and no camera can see that. So the study stopped
+     relying on the proxy alone: every minute or so it pauses and asks the
+     participant where their attention actually was. Those answers are what the
+     detector is scored against, rather than the detector being its own judge.
+     Published work detecting mind-wandering from a webcam reaches an F1 of
+     about 0.40 &mdash; meaningfully better than chance, nowhere near solved,
+     and the number this project should be read against.</p>
 
   <footer>
     <p>A student science-fair project. Source on

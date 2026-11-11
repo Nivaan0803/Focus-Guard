@@ -197,12 +197,54 @@ version as `requirements.txt`.
 | Route | What it is |
 | --- | --- |
 | `/` | Showcase: how the fusion works, what the browser can and cannot see, results |
-| `/study` | The data gatherer: consent + signature → calibrate → arithmetic task → upload |
+| `/study` | The data gatherer: consent + signature → calibrate → SART + thought probes → upload |
 | `/demo` | Booth demo: the live detector, recording nothing |
 | `/selftest` | Asserts the JavaScript ports match the Python, against values in `data/parity.json` |
 
 No Python runs on the server, and no video, screenshot, or window title ever
 leaves the participant's device — only the derived numbers.
+
+### The task: SART, not arithmetic
+
+`/study` runs a **Sustained Attention to Response Task**. Digits 1–9 appear one
+at a time (250 ms, then a 900 ms mask); the participant presses space for every
+digit *except* 3. Pressing on a 3 is a **commission error**, the standard
+operational marker of an attention lapse.
+
+It replaced mental arithmetic for two reasons. Arithmetic keeps people engaged,
+which is the opposite of the state the detector is meant to catch; and it
+produced ~40 scored items per session with no per-item timing, against the
+SART's ~460 trials each carrying a reaction time. `?task=arithmetic` still
+selects the old task.
+
+### Thought probes, and why they matter more than the task change
+
+Every ~60 seconds (jittered 45–75 s, so it cannot be anticipated) the task
+pauses and asks where the participant's attention actually was. This is the
+**only ground truth the web study has.**
+
+Before probes, every feature row's `label` held the experimental condition, so
+`train_model.py` would have learned to predict which arm a session was, not
+whether anyone was distracted. The desktop app gets real labels from an
+operator flipping a toggle (`main.py:380-381`); a remote participant has no
+operator. A probe makes the participant their own annotator.
+
+Answers back-label the preceding 15 s of feature rows, derived at **export
+time** by `web/lib/labels.js` — so the window length and the handling of the
+ambiguous "thinking about the task" answer stay tunable by re-downloading
+rather than re-collecting.
+
+| Condition | Camera | Alerts | Probes | Role |
+| --- | --- | --- | --- | --- |
+| `alerts` | yes | yes | yes | A/B arm |
+| `no_alerts` | no | no | yes | A/B arm |
+| `label_only` | yes | silent | yes | training data only |
+
+`label_only` sits outside the counterbalanced comparison so training labels are
+not collected while the system is actively beeping at the participant — the
+very intervention the study measures.
+
+Design notes and the full rationale: `docs/sart-redesign.md`.
 
 ### Consent gate
 
@@ -246,12 +288,52 @@ though participants saw identical problems.
 `/api/export` emits CSVs byte-compatible with the desktop writers:
 
 ```
-GET /api/export?kind=study                    -> focus_study.py:45-46   -> analyze_study.py
-GET /api/export?kind=features&participant=P01 -> session_logger.py:18   -> train_model.py
-GET /api/export?kind=consent                  -> the consent registry
+GET /api/export?kind=study       -> focus_study.py:45-46  -> analyze_study.py
+GET /api/export?kind=study_sart  -> the SART session measures -> analyze_study.py
+GET /api/export?kind=training    -> session_logger.py:18  -> train_model.py
+GET /api/export?kind=features    -> session_logger.py:18  (raw, provenance labels)
+GET /api/export?kind=trials      -> one row per digit     -> analyze_sart.py
+GET /api/export?kind=probes      -> one row per probe     -> analyze_sart.py
+GET /api/export?kind=consent     -> the consent registry
+GET /api/export?kind=participants-> what has been collected so far
 ```
 
 Authenticate with `Authorization: Bearer $EXPORT_TOKEN`.
+
+**`kind=training` is the one to train on.** It emits the same 14 columns as
+`session_logger.py:18`, but `label` holds a real `focused`/`distracted` verdict
+derived from the probes. `kind=features` emits the raw rows, where `label` is
+provenance (`task`, `probe`, `calibration`) and not a verdict — useful for
+inspection, useless for training.
+
+Two defaults will look like bugs if you have not read them. `kind=study`
+returns **arithmetic** sessions only, because a SART session has no `attempted`
+or `correct` and `analyze_study.py:68` would `float()` its way into nonsense;
+pass `?task_type=sart|all`. `kind=training` returns **`label_only`** sessions
+only, for the confound described above; pass `?condition=all` to accept it. An
+empty training file usually means no `label_only` session has been run yet —
+`kind=participants` reports the counts that tell you so.
+
+Tuning knobs, applied at export time rather than at collection time:
+`?window=15` (seconds a probe describes) and `?task_related=drop|focused|distracted`.
+
+### Checking the probes are measuring anything
+
+```powershell
+python analyze_sart.py study/sart_trials.csv study/probe_responses.csv
+```
+
+The probes are self-reports, and nothing forces them to be true. If they are
+meaningful, lapses and response variability should already be elevated in the
+seconds *before* an off-task report. That prediction does not involve the
+detector, so it validates the labels without assuming what the project is
+trying to show — and if it fails, no detector accuracy computed from those
+labels means anything.
+
+**Expect modest numbers.** Published webcam mind-wandering detection reaches
+F1 ≈ 0.40 on the positive class, barely above chance. A detector reporting 90%
+accuracy has almost certainly found the class imbalance, not the signal. Report
+F1 on the distracted class, not accuracy.
 
 ### Deploying
 
