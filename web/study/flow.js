@@ -16,6 +16,7 @@
  */
 
 import { gate, consentConfig } from "../lib/consent.js";
+import { PROVENANCE } from "../lib/labels.js";
 import * as vision from "../lib/vision.js";
 import { cameraFeatures, poseFromMatrix, irisPosition } from "../lib/features.js";
 import { Calibration } from "../lib/calibrate.js";
@@ -255,7 +256,7 @@ function calibrate(detector) {
       detector.calibration.request(10);
       cal.className = "banner warn";
       timer = setInterval(() => {
-        detector.tick("calibration");
+        detector.tick(PROVENANCE.CALIBRATION);
         const c = detector.calibration;
         if (c.calibrating) {
           cal.textContent = `Calibrating — keep working normally: ${c.remaining.toFixed(1)}s`;
@@ -283,17 +284,36 @@ function calibrate(detector) {
 
 /* ----------------------------------------------------------------- task -- */
 
+/* Which task module to run. A URL parameter rather than a constant so a
+ * mid-study regression to arithmetic is a link, not a git revert - and so the
+ * task_type column can ever hold more than one value. */
+const TASKS = {
+  arithmetic: () => import("./arithmetic-task.js"),
+};
+const DEFAULT_TASK = "arithmetic";
+
+function taskName() {
+  const want = new URLSearchParams(location.search).get("task");
+  return Object.prototype.hasOwnProperty.call(TASKS, want) ? want : DEFAULT_TASK;
+}
+
+/* The task harness.
+ *
+ * Owns the clock, both timers, the away-poll and the detector, and knows
+ * nothing about what the participant is actually doing. A task module owns
+ * its own stimulus area and its own notion of a correct response (see
+ * arithmetic-task.js for the contract).
+ *
+ * Previously all of this was fused into one function alongside the arithmetic
+ * input handling, which is why swapping the task meant rewriting the timers.
+ */
 function task(session, detector) {
   return new Promise((resolve) => {
     const withCam = Boolean(detector);
     const $ = view(`
       <div id="task">
         <p class="banner ${withCam ? "" : "hidden"}" id="banner">Focused</p>
-        <p id="problem">Press Enter to start</p>
-        <input id="answer" type="text" inputmode="numeric" autocomplete="off"
-               autocorrect="off" spellcheck="false" aria-label="Your answer">
-        <p id="feedback" class="muted">${esc(session.minutes)} minutes of arithmetic.
-           Type each answer and press Enter. Answer as many as you can.</p>
+        <div id="taskroot"></div>
         <div class="meter ${withCam ? "" : "hidden"}" style="max-width:320px;margin:18px auto 0">
           <span id="meter"></span>
         </div>
@@ -301,97 +321,89 @@ function task(session, detector) {
       </div>
     `);
 
-    const problemEl = $("#problem"), answerEl = $("#answer");
-    const feedbackEl = $("#feedback"), clockEl = $("#clock");
+    const clockEl = $("#clock");
     const bannerEl = $("#banner"), meterEl = $("#meter");
+    const taskRoot = $("#taskroot");
 
-    import("./arithmetic.js").then(({ ProblemSource }) => {
-      const source = new ProblemSource(session.participant, session.condition);
-      let expected = null;
-      let started = null, ends = null, lastPoll = null;
-      let attempted = 0, correct = 0, timesLeft = 0, secondsAway = 0;
-      let wasForeground = true;
-      let pollTimer = null, tickTimer = null;
+    let started = null, ends = null, lastPoll = null;
+    let timesLeft = 0, secondsAway = 0;
+    let wasForeground = true;
+    let pollTimer = null, tickTimer = null;
+    let active = null;
 
-      const nextProblem = () => {
-        const p = source.next();
-        expected = p.answer;
-        problemEl.textContent = p.text;
-        answerEl.value = "";
-      };
-
-      const finish = () => {
-        clearInterval(pollTimer);
-        clearInterval(tickTimer);
-        answerEl.disabled = true;
-        problemEl.textContent = "Time's up!";
-        feedbackEl.textContent = "";
-        feedbackEl.className = "muted";
-        clockEl.textContent = "";
-        resolve({
-          attempted, correct, timesLeft, secondsAway,
-          rows: detector ? detector.rows : [],
-          alerts: detector ? detector.score.alerts : 0,
-          modelName: detector ? describeModel(detector.model) : "",
-        });
-      };
-
-      // focus_study.py:130-137
-      const poll = () => {
-        const t = now();
-        const foreground = document.hasFocus() && !document.hidden;
-        if (!foreground) {
-          secondsAway += t - lastPoll;
-          if (wasForeground) timesLeft += 1;
-        }
-        wasForeground = foreground;
-        lastPoll = t;
-
-        const left = ends - t;
-        if (left <= 0) return finish();
-        clockEl.textContent = `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, "0")} left`;
-      };
-
-      answerEl.addEventListener("keydown", (ev) => {
-        if (ev.key !== "Enter") return;
-        ev.preventDefault();
-
-        if (started === null) {
-          started = now();
-          ends = started + session.minutes * 60;
-          lastPoll = started;
-          if (detector) detector.t0 = started;
-          feedbackEl.textContent = "";
-          nextProblem();
-          pollTimer = setInterval(poll, POLL_MS);
-          if (detector) {
-            tickTimer = setInterval(() => {
-              const snap = detector.tick(session.condition);
-              if (!snap) return;
-              bannerEl.className = `banner ${snap.banner}`;
-              bannerEl.textContent = snap.reason && snap.banner !== "good"
-                ? snap.reason
-                : "Focused";
-              meterEl.style.width = `${(snap.score * 100).toFixed(0)}%`;
-              meterEl.style.background = detector.score.meterColor;
-            }, TICK_MS);
-          }
-          return;
-        }
-
-        const text = answerEl.value.trim().replace("−", "-");
-        if (!text) return;
-        attempted += 1;
-        const right = Number.parseInt(text, 10) === expected;
-        if (right) correct += 1;
-        feedbackEl.textContent = right ? "✓" : `✗  (${expected})`;
-        feedbackEl.className = right ? "right" : "wrong";
-        nextProblem();
+    const finish = () => {
+      clearInterval(pollTimer);
+      clearInterval(tickTimer);
+      active.stop();
+      clockEl.textContent = "";
+      resolve({
+        // Task-shaped figures (attempted/correct for arithmetic, the SART
+        // aggregates for SART) come from the task; everything else is the
+        // harness's own.
+        ...active.summary(),
+        trials: active.trials,
+        timesLeft, secondsAway,
+        rows: detector ? detector.rows : [],
+        alerts: detector ? detector.score.alerts : 0,
+        modelName: detector ? describeModel(detector.model) : "",
       });
+    };
 
-      answerEl.focus();
-      // The participant may click away; keep the caret where the task is.
-      addEventListener("focus", () => { if (!answerEl.disabled) answerEl.focus(); });
+    // focus_study.py:130-137
+    const poll = () => {
+      const t = now();
+      const foreground = document.hasFocus() && !document.hidden;
+      if (!foreground) {
+        secondsAway += t - lastPoll;
+        if (wasForeground) timesLeft += 1;
+      }
+      wasForeground = foreground;
+      lastPoll = t;
+
+      const left = ends - t;
+      if (left <= 0) return finish();
+      clockEl.textContent = `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, "0")} left`;
+    };
+
+    /* The task calls this when the participant has signalled they are ready.
+     * The clock starts here and nowhere else, so every task agrees on what
+     * t0 means. */
+    const begin = () => {
+      if (started !== null) return;
+      started = now();
+      ends = started + session.minutes * 60;
+      lastPoll = started;
+      if (detector) detector.t0 = started;
+
+      active.start(started);
+      pollTimer = setInterval(poll, POLL_MS);
+
+      if (detector) {
+        tickTimer = setInterval(() => {
+          // PROVENANCE.TASK, not session.condition. The condition is already
+          // on the session row; writing it here left `label` holding no
+          // information and would have had train_model.py learn to predict
+          // which arm a session was. See lib/labels.js.
+          const snap = detector.tick(PROVENANCE.TASK);
+          if (!snap) return;
+          bannerEl.className = `banner ${snap.banner}`;
+          bannerEl.textContent = snap.reason && snap.banner !== "good"
+            ? snap.reason
+            : "Focused";
+          meterEl.style.width = `${(snap.score * 100).toFixed(0)}%`;
+          meterEl.style.background = detector.score.meterColor;
+        }, TICK_MS);
+      }
+    };
+
+    TASKS[taskName()]().then(({ createTask }) => {
+      active = createTask({
+        root: taskRoot,
+        participant: session.participant,
+        condition: session.condition,
+        minutes: session.minutes,
+        onBegin: begin,
+      });
     });
   });
 }
