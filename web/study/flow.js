@@ -288,9 +288,10 @@ function calibrate(detector) {
  * mid-study regression to arithmetic is a link, not a git revert - and so the
  * task_type column can ever hold more than one value. */
 const TASKS = {
+  sart: () => import("./sart-task.js"),
   arithmetic: () => import("./arithmetic-task.js"),
 };
-const DEFAULT_TASK = "arithmetic";
+const DEFAULT_TASK = "sart";
 
 function taskName() {
   const want = new URLSearchParams(location.search).get("task");
