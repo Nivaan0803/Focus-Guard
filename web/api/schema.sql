@@ -1,4 +1,11 @@
--- Run once against the Vercel Postgres database (Storage tab -> Query).
+-- Run once against the Vercel Postgres database (Storage tab -> Query),
+-- THEN run schema_sart.sql, which adds the SART aggregate columns and the
+-- sart_trials / probe_responses tables.
+--
+-- The two are kept as separate files rather than folded into one on purpose:
+-- schema_sart.sql is additive and idempotent, so running base-then-migration
+-- gives a fresh database exactly the same result as an existing one, and
+-- there is no second copy of those statements to drift out of step.
 --
 -- Two deliberately SEPARATE tables.
 --
