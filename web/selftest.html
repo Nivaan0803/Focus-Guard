@@ -31,6 +31,10 @@ import { HeuristicTree } from "./lib/tree.js";
 import { irisPosition, eyeOpenness } from "./lib/features.js";
 import { Calibration } from "./lib/calibrate.js";
 import { ScoreTracker } from "./lib/score.js";
+import { ProblemSource } from "./study/arithmetic.js";
+import { seeded } from "./study/rng.js";
+import { buildSequence, classify, summarize, TARGET_DIGIT } from "./study/sart.js";
+import { deriveLabels, mapProbe, TASK_RELATED } from "./lib/labels.js";
 
 const EPS = 1e-9;
 const results = [];
@@ -118,6 +122,126 @@ check("eyeOpenness", near(open, ref.openness_expected, 1e-12), open, ref.opennes
   check("alert at 3.0 s", s.shouldAlert(3.0, "x") === true, "alert", "alert");
   check("no repeat inside 4 s", s.shouldAlert(5.0, "x") === false, "no alert", "no alert");
   check("repeat after 4 s", s.shouldAlert(7.1, "x") === true, "alert", "alert");
+}
+
+/* ---- 7. RNG lock: regression, NOT Python parity ----
+ * There is no Python SART, and arithmetic's JS sequence never matched
+ * Python's Mersenne Twister anyway (see rng.js). These pin the JS output so
+ * extracting rng.js out of arithmetic.js, or touching it later, cannot
+ * silently reshuffle every participant's stimuli. */
+{
+  for (const cond of ["alerts", "no_alerts"]) {
+    const src = new ProblemSource("P01", cond);
+    const got = Array.from({ length: 10 }, () => src.next().text);
+    const want = ref.arithmetic[`P01-${cond}`];
+    check(`arithmetic sequence P01-${cond}`,
+          JSON.stringify(got) === JSON.stringify(want), got.join(", "), want.join(", "));
+  }
+
+  const rand = seeded(ref.sart.seed);
+  const raw = Array.from({ length: 8 }, () => rand());
+  check("rng first 8 for sart seed",
+        raw.every((v, i) => near(v, ref.sart.rng_first8[i], 1e-15)),
+        raw.join(", "), ref.sart.rng_first8.join(", "));
+}
+
+/* ---- 8. SART sequence structure ----
+ * Blocks are permutations of 1..9, so the target rate is exactly 1/9 by
+ * construction rather than by sampling. A drifting target count would make
+ * commission_rate incomparable between participants. */
+{
+  const seq = buildSequence(seeded(ref.sart.seed), ref.sart.sequence.count);
+  const targets = seq.filter((d) => d === TARGET_DIGIT).length;
+  const rate = targets / seq.length;
+  let adjacent = 0;
+  for (let i = 1; i < seq.length; i++) {
+    if (seq[i] === TARGET_DIGIT && seq[i - 1] === TARGET_DIGIT) adjacent += 1;
+  }
+
+  check("sart sequence length", seq.length === ref.sart.sequence.count,
+        seq.length, ref.sart.sequence.count);
+  check("sart target count exact", targets === ref.sart.sequence.target_count,
+        targets, ref.sart.sequence.target_count);
+  check("sart target rate in range",
+        rate >= ref.sart.sequence.target_rate_min && rate <= ref.sart.sequence.target_rate_max,
+        rate.toFixed(4), `${ref.sart.sequence.target_rate_min}-${ref.sart.sequence.target_rate_max}`);
+  check("sart digits all 1-9", seq.every((d) => Number.isInteger(d) && d >= 1 && d <= 9),
+        "out of range digit", "all 1-9");
+  check("sart no two adjacent targets", adjacent === 0, adjacent, 0);
+  check("sart first 20 digits",
+        JSON.stringify(seq.slice(0, 20)) === JSON.stringify(ref.sart.sequence.first20),
+        seq.slice(0, 20).join(","), ref.sart.sequence.first20.join(","));
+}
+
+/* ---- 9. Outcome table and aggregate formulas ----
+ * The aggregates ARE Python parity: generated with numpy ddof=1. A population
+ * SD (ddof=0) would give 282.105..., so this discriminates the convention. */
+{
+  ref.sart.outcome_table.forEach((c) => {
+    const got = classify(c.is_target, c.responded);
+    check(`classify target=${c.is_target} responded=${c.responded}`,
+          got === c.expect, got, c.expect);
+  });
+
+  const agg = summarize(ref.sart.trials_fixture);
+  const want = ref.sart.aggregates_expected;
+  for (const [key, expected] of Object.entries(want)) {
+    const got = agg[key];
+    check(`aggregate ${key}`,
+          typeof got === "number" && near(got, expected, 1e-12), got, expected);
+  }
+}
+
+/* ---- 10. Probe -> label derivation ----
+ * lib/labels.js is imported by api/export.js too, so these exercise the
+ * production path rather than a copy of the rules. */
+{
+  const { rows: rowsIn, probes } = ref.labels;
+
+  const dropped = deriveLabels(rowsIn, probes, { taskRelated: TASK_RELATED.DROP });
+  check("labels: correct rows labelled",
+        JSON.stringify(dropped.rows.map((r) => r.id)) ===
+          JSON.stringify(ref.labels.expect_drop.labelled_ids),
+        dropped.rows.map((r) => r.id).join(","),
+        ref.labels.expect_drop.labelled_ids.join(","));
+
+  for (const [key, expected] of Object.entries(ref.labels.expect_drop.counts)) {
+    check(`labels count ${key}`, dropped.counts[key] === expected,
+          dropped.counts[key], expected);
+  }
+
+  const asFocused = deriveLabels(rowsIn, probes, { taskRelated: TASK_RELATED.FOCUSED });
+  check("labels: task_related as focused",
+        asFocused.counts.focused === ref.labels.expect_task_related_focused.focused &&
+        asFocused.counts.distracted === ref.labels.expect_task_related_focused.distracted,
+        `${asFocused.counts.focused}/${asFocused.counts.distracted}`,
+        `${ref.labels.expect_task_related_focused.focused}/${ref.labels.expect_task_related_focused.distracted}`);
+
+  const asDistracted = deriveLabels(rowsIn, probes, { taskRelated: TASK_RELATED.DISTRACTED });
+  check("labels: task_related as distracted",
+        asDistracted.counts.focused === ref.labels.expect_task_related_distracted.focused &&
+        asDistracted.counts.distracted === ref.labels.expect_task_related_distracted.distracted,
+        `${asDistracted.counts.focused}/${asDistracted.counts.distracted}`,
+        `${ref.labels.expect_task_related_distracted.focused}/${ref.labels.expect_task_related_distracted.distracted}`);
+
+  // An unanswered probe must not lend its window to a later one, and a
+  // dropped task_related window must not fall through either - both would be
+  // attributing a mental state to a window it was never reported for.
+  check("labels: unanswered probe yields no label",
+        !dropped.rows.some((r) => r.id === "r4"), "r4 present", "r4 omitted");
+  check("labels: ambiguous window does not fall through",
+        !dropped.rows.some((r) => r.id === "r3"), "r3 present", "r3 omitted");
+  check("labels: only focused/distracted ever emitted",
+        dropped.rows.every((r) => r.label === "focused" || r.label === "distracted"),
+        "other label emitted", "focused|distracted");
+
+  check("mapProbe on_task", mapProbe("on_task") === "focused", mapProbe("on_task"), "focused");
+  check("mapProbe mind_wandering", mapProbe("mind_wandering") === "distracted",
+        mapProbe("mind_wandering"), "distracted");
+  check("mapProbe external", mapProbe("external") === "distracted",
+        mapProbe("external"), "distracted");
+  check("mapProbe task_related drops by default", mapProbe("task_related") === null,
+        mapProbe("task_related"), null);
 }
 
 /* ---- render ---- */

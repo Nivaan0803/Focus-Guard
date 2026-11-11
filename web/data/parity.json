@@ -46,7 +46,7 @@
     "task_tab_active": 1,
     "calibrated": 1,
     "face_visible": 1,
-    "head_yaw": 25.0
+    "head_yaw": 25
    },
    "expect": [
     "distracted",
@@ -60,7 +60,7 @@
     "task_tab_active": 1,
     "calibrated": 1,
     "face_visible": 1,
-    "head_pitch": 19.0
+    "head_pitch": 19
    },
    "expect": [
     "distracted",
@@ -88,7 +88,7 @@
     "task_tab_active": 1,
     "calibrated": 1,
     "face_visible": 1,
-    "head_yaw": 22.0
+    "head_yaw": 22
    },
    "expect": [
     "focused",
@@ -102,7 +102,7 @@
     "task_tab_active": 1,
     "calibrated": 0,
     "face_visible": 0,
-    "head_yaw": 90.0
+    "head_yaw": 90
    },
    "expect": [
     "focused",
@@ -152,46 +152,46 @@
    0.42,
    0.5
   ],
-  "468": [
-   0.38,
+  "145": [
+   0.36,
+   0.5115
+  ],
+  "159": [
+   0.36,
+   0.4885
+  ],
+  "263": [
+   0.7,
    0.5
   ],
   "362": [
    0.58,
    0.5
   ],
-  "263": [
-   0.7,
-   0.5
-  ],
-  "473": [
-   0.66,
-   0.5
-  ],
-  "159": [
-   0.36,
-   0.4885
-  ],
-  "145": [
-   0.36,
-   0.5115
+  "374": [
+   0.64,
+   0.511
   ],
   "386": [
    0.64,
    0.489
   ],
-  "374": [
-   0.64,
-   0.511
+  "468": [
+   0.38,
+   0.5
+  ],
+  "473": [
+   0.66,
+   0.5
   ]
  },
  "iris_expected": 0.1666666666666673,
  "openness_expected": 0.5859374999999998,
  "calibration": {
   "pitch_samples": [
-   1.0,
-   2.0,
-   3.0,
+   1,
+   2,
+   3,
    2.5,
    1.5,
    2.2,
@@ -199,9 +199,9 @@
    2.1,
    2.4,
    1.9,
-   1.0,
-   2.0,
-   3.0,
+   1,
+   2,
+   3,
    2.5,
    1.5,
    2.2,
@@ -209,9 +209,9 @@
    2.1,
    2.4,
    1.9,
-   1.0,
-   2.0,
-   3.0,
+   1,
+   2,
+   3,
    2.5,
    1.5,
    2.2,
@@ -221,7 +221,7 @@
    1.9
   ],
   "yaw_samples": [
-   -1.0,
+   -1,
    0.5,
    1.2,
    -0.3,
@@ -231,7 +231,7 @@
    0.9,
    0.4,
    -0.2,
-   -1.0,
+   -1,
    0.5,
    1.2,
    -0.3,
@@ -241,7 +241,7 @@
    0.9,
    0.4,
    -0.2,
-   -1.0,
+   -1,
    0.5,
    1.2,
    -0.3,
@@ -256,7 +256,7 @@
    0.01,
    -0.02,
    0.015,
-   0.0,
+   0,
    -0.01,
    0.02,
    -0.005,
@@ -266,7 +266,7 @@
    0.01,
    -0.02,
    0.015,
-   0.0,
+   0,
    -0.01,
    0.02,
    -0.005,
@@ -276,7 +276,7 @@
    0.01,
    -0.02,
    0.015,
-   0.0,
+   0,
    -0.01,
    0.02,
    -0.005,
@@ -308,5 +308,299 @@
   0.4396067400426975,
   0.36047752683501194,
   0.2955915720047098
- ]
+ ],
+ "arithmetic": {
+  "_note": "Pinned BEFORE rng.js was extracted out of arithmetic.js, by running the pre-refactor ProblemSource. Not Python parity - a regression lock proving the extraction did not reshuffle any participant stimuli.",
+  "P01-alerts": [
+   "78 − 21",
+   "12 × 6",
+   "19 × 5",
+   "9 × 4",
+   "62 − 41",
+   "78 − 37",
+   "19 × 7",
+   "9 × 7",
+   "92 − 36",
+   "86 − 41"
+  ],
+  "P01-no_alerts": [
+   "75 − 33",
+   "71 − 45",
+   "62 − 44",
+   "93 − 37",
+   "10 × 6",
+   "12 × 5",
+   "78 − 38",
+   "16 × 6",
+   "60 − 48",
+   "72 + 50"
+  ]
+ },
+ "sart": {
+  "_note": "There is no Python SART, so the sequence checks are regression locks. The aggregates ARE Python parity: rt_sd_ms/rt_cv were generated with numpy 1.26.4 using ddof=1 (sample SD). ddof=0 would give 282.1051813301793 - the check discriminates the convention.",
+  "seed": "P01-alerts-sart",
+  "rng_first8": [
+   0.6160008073784411,
+   0.6211716420948505,
+   0.8448509206064045,
+   0.7769448310136795,
+   0.7721441760659218,
+   0.35018206271342933,
+   0.11984292417764664,
+   0.7103299871087074
+  ],
+  "sequence": {
+   "count": 450,
+   "first20": [
+    3,
+    7,
+    1,
+    2,
+    4,
+    8,
+    9,
+    5,
+    6,
+    2,
+    9,
+    6,
+    1,
+    7,
+    8,
+    5,
+    4,
+    3,
+    2,
+    1
+   ],
+   "target_count": 50,
+   "target_rate_min": 0.1,
+   "target_rate_max": 0.125
+  },
+  "outcome_table": [
+   {
+    "is_target": false,
+    "responded": true,
+    "expect": "hit"
+   },
+   {
+    "is_target": false,
+    "responded": false,
+    "expect": "omission_error"
+   },
+   {
+    "is_target": true,
+    "responded": true,
+    "expect": "commission_error"
+   },
+   {
+    "is_target": true,
+    "responded": false,
+    "expect": "correct_omission"
+   }
+  ],
+  "trials_fixture": [
+   {
+    "trial": 0,
+    "is_target": false,
+    "responded": true,
+    "rt_ms": 420,
+    "outcome": "hit"
+   },
+   {
+    "trial": 1,
+    "is_target": false,
+    "responded": true,
+    "rt_ms": 455,
+    "outcome": "hit"
+   },
+   {
+    "trial": 2,
+    "is_target": true,
+    "responded": false,
+    "rt_ms": null,
+    "outcome": "correct_omission"
+   },
+   {
+    "trial": 3,
+    "is_target": false,
+    "responded": true,
+    "rt_ms": 390,
+    "outcome": "hit"
+   },
+   {
+    "trial": 4,
+    "is_target": true,
+    "responded": true,
+    "rt_ms": 310,
+    "outcome": "commission_error"
+   },
+   {
+    "trial": 5,
+    "is_target": false,
+    "responded": false,
+    "rt_ms": null,
+    "outcome": "omission_error"
+   },
+   {
+    "trial": 6,
+    "is_target": false,
+    "responded": true,
+    "rt_ms": 510,
+    "outcome": "hit"
+   },
+   {
+    "trial": 7,
+    "is_target": true,
+    "responded": false,
+    "rt_ms": null,
+    "outcome": "correct_omission"
+   },
+   {
+    "trial": 8,
+    "is_target": false,
+    "responded": true,
+    "rt_ms": 475,
+    "outcome": "hit"
+   },
+   {
+    "trial": 9,
+    "is_target": false,
+    "responded": true,
+    "rt_ms": 1200,
+    "outcome": "hit"
+   },
+   {
+    "trial": 10,
+    "is_target": false,
+    "responded": true,
+    "rt_ms": 300,
+    "outcome": "dropped"
+   },
+   {
+    "trial": 11,
+    "is_target": true,
+    "responded": false,
+    "rt_ms": null,
+    "outcome": "dropped"
+   }
+  ],
+  "aggregates_expected": {
+   "sart_trials": 10,
+   "sart_targets": 3,
+   "sart_go_trials": 7,
+   "sart_dropped_trials": 2,
+   "sart_accuracy": 0.8,
+   "commission_errors": 1,
+   "commission_rate": 0.3333333333333333,
+   "omission_errors": 1,
+   "omission_rate": 0.14285714285714285,
+   "rt_mean_ms": 575,
+   "rt_sd_ms": 309.0307428072489,
+   "rt_cv": 0.5374447700995633
+  }
+ },
+ "labels": {
+  "_note": "Fixtures for lib/labels.js, the probe-to-label derivation imported by BOTH api/export.js and this selftest, so these checks exercise the production path.",
+  "probes": [
+   {
+    "probe_index": 0,
+    "elapsed": 60,
+    "response": "on_task"
+   },
+   {
+    "probe_index": 1,
+    "elapsed": 120,
+    "response": "mind_wandering"
+   },
+   {
+    "probe_index": 2,
+    "elapsed": 180,
+    "response": "task_related"
+   },
+   {
+    "probe_index": 3,
+    "elapsed": 240,
+    "response": null
+   }
+  ],
+  "rows": [
+   {
+    "id": "r0",
+    "elapsed": 50,
+    "label": "task"
+   },
+   {
+    "id": "r1",
+    "elapsed": 40,
+    "label": "task"
+   },
+   {
+    "id": "r2",
+    "elapsed": 110,
+    "label": "task"
+   },
+   {
+    "id": "r3",
+    "elapsed": 175,
+    "label": "task"
+   },
+   {
+    "id": "r4",
+    "elapsed": 235,
+    "label": "task"
+   },
+   {
+    "id": "r5",
+    "elapsed": 60,
+    "label": "probe"
+   },
+   {
+    "id": "r6",
+    "elapsed": 55,
+    "label": "calibration"
+   },
+   {
+    "id": "r7",
+    "elapsed": 60,
+    "label": "task"
+   }
+  ],
+  "expect_drop": {
+   "labelled_ids": [
+    "r0",
+    "r2",
+    "r7"
+   ],
+   "counts": {
+    "total": 8,
+    "labelled": 3,
+    "focused": 2,
+    "distracted": 1,
+    "skipped_not_task": 2,
+    "skipped_no_probe": 2,
+    "skipped_ambiguous": 1
+   }
+  },
+  "expect_task_related_focused": {
+   "labelled_ids": [
+    "r0",
+    "r2",
+    "r3",
+    "r7"
+   ],
+   "focused": 3,
+   "distracted": 1
+  },
+  "expect_task_related_distracted": {
+   "labelled_ids": [
+    "r0",
+    "r2",
+    "r3",
+    "r7"
+   ],
+   "focused": 2,
+   "distracted": 2
+  }
+ }
 }
