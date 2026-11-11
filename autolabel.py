@@ -163,6 +163,12 @@ def label_session(
       moment after the alt-tab, and already turning back before the click. The
       boundary is precisely where the label is least trustworthy, so labelling
       it teaches the model noise.
+
+    The two interact, and it is worth knowing how. A run only survives the
+    guard if it is longer than ``2 * guard``, so the effective minimum is
+    ``max(min_away, 2 * guard)``. At the shipped defaults those are both 2.0 s,
+    which means lowering ``min_away`` alone changes nothing until it is also
+    below twice the guard. Raise ``min_away`` to make it bind on its own.
     """
     labels: List[Optional[str]] = [None] * len(rows)
 
