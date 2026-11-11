@@ -23,3 +23,11 @@ exportToHTML/
 # Web app
 web/node_modules/
 .vercel
+
+# Participant data must never land in web/ - everything there is PUBLISHED by
+# the deployment, so a stray export would be downloadable by anyone with the
+# URL. fetch_study_data.py refuses to write here; this is the second lock.
+web/**/*.csv
+web/**/*.sqlite
+web/study/*.json
+!web/data/*.json
