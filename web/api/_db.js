@@ -71,6 +71,18 @@ export function validParticipant(value) {
 }
 
 export function num(value) {
+  /* An absent measure must become NULL, not 0.
+   *
+   * Number("") is 0, so without the first line a SART session - which leaves
+   * `attempted`, `correct`, `accuracy` and `correct_per_min` empty because it
+   * has no such measures - would store four zeros that are indistinguishable
+   * from a participant who genuinely scored nothing. analyze_study.py:68 does
+   * a bare float() on the column, so those zeros would be averaged in and
+   * nothing would complain.
+   *
+   * Same reasoning for an unanswered self_rating.
+   */
+  if (value === "" || value === null || value === undefined) return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }

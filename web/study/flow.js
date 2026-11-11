@@ -27,7 +27,8 @@ import { ScoreTracker } from "../lib/score.js";
 import { beep } from "../lib/beep.js";
 import {
   submit, flush, downloadCSV, featureRowFor, studyRowFor,
-  STUDY_COLUMNS, FEATURE_COLUMNS,
+  sartRowFor, trialRowsFor, probeRowsFor,
+  STUDY_COLUMNS, FEATURE_COLUMNS, SART_COLUMNS, TRIAL_COLUMNS, PROBE_COLUMNS,
 } from "../lib/upload.js";
 
 const app = document.getElementById("app");
@@ -539,17 +540,41 @@ function rating() {
 
 async function done(session, result, selfRating) {
   const finished = new Date().toISOString().replace("T", " ").slice(0, 16);
-  const studyRow = studyRowFor({
+  const isSart = result.task_type === "sart";
+
+  const shared = {
     finished,
     participant: session.participant,
     condition: session.condition,
     minutes: session.minutes,
-    attempted: result.attempted,
-    correct: result.correct,
     secondsAway: result.secondsAway,
     timesLeft: result.timesLeft,
     selfRating,
+  };
+
+  // Always emitted, and still byte-compatible with focus_study.py:45-46. For
+  // a SART session the four arithmetic columns come back empty rather than
+  // carrying a SART analogue - see studyRowFor for why that matters.
+  const studyRow = studyRowFor({
+    ...shared,
+    attempted: result.attempted,
+    correct: result.correct,
   });
+
+  // `result` already carries the task's summary() spread into it, so the SART
+  // aggregates are top-level fields.
+  const sartRow = isSart
+    ? sartRowFor({
+        ...shared,
+        aggregates: result,
+        probes: result.probes,
+        wallSeconds: result.wallSeconds,
+        probeSeconds: result.probeSeconds,
+      })
+    : null;
+
+  const trialRows = trialRowsFor(result.trials);
+  const probeRows = probeRowsFor(result.probes);
 
   const payload = {
     id: `${session.participant}-${session.condition}-${Date.now()}`,
@@ -557,8 +582,19 @@ async function done(session, result, selfRating) {
     participant: session.participant,
     condition: session.condition,
     finished,
+    // The discriminator that keeps arithmetic and SART sessions from ever
+    // being pooled by analyze_study.py.
+    task_type: result.task_type,
+    task_version: result.task_version,
+    // Wall time runs longer than minutes*60 once probes pause the clock, so
+    // the denominator for seconds_away stays recoverable.
+    wall_seconds: result.wallSeconds,
+    probe_seconds: result.probeSeconds,
     study: studyRow,
+    sart: sartRow,
     features: result.rows,
+    trials: trialRows,
+    probes: probeRows,
     meta: {
       alerts: result.alerts,
       model: result.modelName,
@@ -603,11 +639,20 @@ async function done(session, result, selfRating) {
       <p class="small muted">Look in your Downloads folder if you cannot find it.</p>
     </div>`;
 
+  // "N correct out of M" is meaningless for a vigilance task, where the whole
+  // point is that almost every trial is a correct press.
+  const summaryLine = isSart
+    ? `<p><strong>${esc(result.sart_trials ?? 0)}</strong> trials completed.</p>
+       <p class="muted small">You correctly held back on
+          ${esc((result.sart_targets ?? 0) - (result.commission_errors ?? 0))}
+          of ${esc(result.sart_targets ?? 0)} target digits.</p>`
+    : `<p><strong>${esc(result.correct)}</strong> correct out of
+          <strong>${esc(result.attempted)}</strong>.</p>`;
+
   const $ = view(`
     <h1>Thank you</h1>
     <div class="card">
-      <p><strong>${esc(result.correct)}</strong> correct out of
-         <strong>${esc(result.attempted)}</strong>.</p>
+      ${summaryLine}
       <p class="muted small">You left the task window ${esc(result.timesLeft)} time(s),
          for ${esc(result.secondsAway.toFixed(1))} seconds in total.</p>
       <p id="status" class="muted">Sending&hellip;</p>
@@ -616,10 +661,14 @@ async function done(session, result, selfRating) {
     <div class="card">
       <h3>Keep a copy</h3>
       <p class="small muted">If anything went wrong with the upload, download these
-         and send them to the researcher.</p>
+         and send them to the researcher. Each one is a separate file because
+         they feed different analysis scripts.</p>
       <div class="row">
         <button id="dlstudy">Download session CSV</button>
+        ${isSart ? `<button id="dlsart">Download SART summary CSV</button>` : ""}
         <button id="dlfeat" ${result.rows.length ? "" : "disabled"}>Download detector CSV</button>
+        <button id="dltrials" ${trialRows.length ? "" : "disabled"}>Download trials CSV</button>
+        <button id="dlprobes" ${probeRows.length ? "" : "disabled"}>Download probes CSV</button>
       </div>
     </div>
     <div class="card">
@@ -635,10 +684,19 @@ async function done(session, result, selfRating) {
       + "be sent automatically next time it opens. Please also download the files below.";
   status.className = uploaded ? "muted" : "banner warn";
 
+  const stem = `${session.participant}_${session.condition}`;
   $("#dlstudy").addEventListener("click", () => downloadCSV(
-    `results_${session.participant}_${session.condition}.csv`, STUDY_COLUMNS, [studyRow]));
+    `results_${stem}.csv`, STUDY_COLUMNS, [studyRow]));
   $("#dlfeat").addEventListener("click", () => downloadCSV(
     `${session.participant.toLowerCase()}_${session.condition}.csv`, FEATURE_COLUMNS, result.rows));
+  if (sartRow) {
+    $("#dlsart").addEventListener("click", () => downloadCSV(
+      `sart_${stem}.csv`, SART_COLUMNS, [sartRow]));
+  }
+  $("#dltrials").addEventListener("click", () => downloadCSV(
+    `trials_${stem}.csv`, TRIAL_COLUMNS, trialRows));
+  $("#dlprobes").addEventListener("click", () => downloadCSV(
+    `probes_${stem}.csv`, PROBE_COLUMNS, probeRows));
   $("#again").addEventListener("click", () => { location.search = ""; });
 }
 

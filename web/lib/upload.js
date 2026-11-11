@@ -7,6 +7,9 @@
  * a CSV by hand as a last resort.
  */
 
+// One definition of "off-task", shared with the training export.
+import { mapProbe, DISTRACTED } from "./labels.js";
+
 const QUEUE_KEY = "focusguard.pending";
 
 function readQueue() {
@@ -131,17 +134,129 @@ export function featureRowFor(elapsed, features, label) {
 
 // focus_study.py:169-175 - accuracy 3dp, correct_per_min 2dp, seconds_away 1dp
 export function studyRowFor(s) {
+  /* A SART session has no notion of "attempted" or "correct". Those four
+   * columns stay in the row so the shape still matches focus_study.py:45-46,
+   * but they are left EMPTY rather than filled with a zero, a NaN, or a SART
+   * analogue.
+   *
+   * Reusing them would be the worst option: analyze_study.py:68 does a bare
+   * float() on whatever is in the column, so a commission rate parked in
+   * `accuracy` would be pooled with real arithmetic accuracies and nothing
+   * would complain. Empty means NULL on the way into Postgres, and task_type
+   * is what separates the two populations.
+   *
+   * Arithmetic output is unchanged: attempted/correct of 0 are still finite,
+   * so a zero-score session formats exactly as it always did.
+   */
+  const scored = Number.isFinite(s.attempted) && Number.isFinite(s.correct);
   return {
     finished: s.finished,
     participant: s.participant,
     condition: s.condition,
     minutes: String(s.minutes),
-    attempted: s.attempted,
-    correct: s.correct,
-    accuracy: s.attempted ? (s.correct / s.attempted).toFixed(3) : "0",
-    correct_per_min: (s.correct / s.minutes).toFixed(2),
+    attempted: scored ? s.attempted : "",
+    correct: scored ? s.correct : "",
+    accuracy: scored ? (s.attempted ? (s.correct / s.attempted).toFixed(3) : "0") : "",
+    correct_per_min: scored ? (s.correct / s.minutes).toFixed(2) : "",
     seconds_away: s.secondsAway.toFixed(1),
     times_left: s.timesLeft,
     self_rating: s.selfRating ?? "",
   };
+}
+
+/* ---- SART ---------------------------------------------------------------
+ * None of these share a column name with the arithmetic measures, on purpose.
+ */
+
+export const SART_COLUMNS = [
+  "finished", "participant", "condition", "minutes",
+  "sart_trials", "sart_targets", "sart_go_trials", "sart_dropped_trials",
+  "sart_accuracy", "commission_errors", "commission_rate",
+  "omission_errors", "omission_rate", "rt_mean_ms", "rt_sd_ms", "rt_cv",
+  "probes_shown", "probes_answered", "mw_rate",
+  "seconds_away", "times_left", "self_rating", "wall_seconds", "probe_seconds",
+];
+
+export const TRIAL_COLUMNS = [
+  "trial", "onset", "digit", "is_target", "responded", "rt_ms", "outcome",
+  "extra_presses",
+];
+
+export const PROBE_COLUMNS = [
+  "probe_index", "elapsed", "response", "latency_ms", "trials_before",
+];
+
+const fixed = (v, places) => (Number.isFinite(v) ? v.toFixed(places) : "");
+
+/* Probe-reported off-task rate.
+ *
+ * Numerator is every answered probe that lib/labels.js maps to `distracted`,
+ * so there is one definition of "off-task" in the codebase rather than two
+ * that can drift. Denominator is every ANSWERED probe, which means a
+ * `task_related` answer counts as not-off-task rather than being discarded -
+ * the participant was still engaged with the task, just not performing it.
+ */
+export function probeSummary(probes) {
+  const list = probes || [];
+  const answered = list.filter((p) => p && p.response);
+  const offTask = answered.filter((p) => mapProbe(p.response) === DISTRACTED);
+  return {
+    probes_shown: list.length,
+    probes_answered: answered.length,
+    mw_rate: answered.length ? offTask.length / answered.length : null,
+  };
+}
+
+export function sartRowFor(s) {
+  const a = s.aggregates || {};
+  const p = probeSummary(s.probes);
+  return {
+    finished: s.finished,
+    participant: s.participant,
+    condition: s.condition,
+    minutes: String(s.minutes),
+    sart_trials: a.sart_trials ?? "",
+    sart_targets: a.sart_targets ?? "",
+    sart_go_trials: a.sart_go_trials ?? "",
+    sart_dropped_trials: a.sart_dropped_trials ?? "",
+    sart_accuracy: fixed(a.sart_accuracy, 4),
+    commission_errors: a.commission_errors ?? "",
+    commission_rate: fixed(a.commission_rate, 4),
+    omission_errors: a.omission_errors ?? "",
+    omission_rate: fixed(a.omission_rate, 4),
+    rt_mean_ms: fixed(a.rt_mean_ms, 1),
+    rt_sd_ms: fixed(a.rt_sd_ms, 1),
+    rt_cv: fixed(a.rt_cv, 4),
+    probes_shown: p.probes_shown,
+    probes_answered: p.probes_answered,
+    mw_rate: fixed(p.mw_rate, 4),
+    seconds_away: s.secondsAway.toFixed(1),
+    times_left: s.timesLeft,
+    self_rating: s.selfRating ?? "",
+    wall_seconds: fixed(s.wallSeconds, 1),
+    probe_seconds: fixed(s.probeSeconds, 1),
+  };
+}
+
+export function trialRowsFor(trials) {
+  return (trials || []).map((t) => ({
+    trial: t.trial,
+    onset: Number(t.onset).toFixed(3),
+    digit: t.digit,
+    is_target: t.is_target ? 1 : 0,
+    responded: t.responded ? 1 : 0,
+    rt_ms: fixed(t.rt_ms, 1),
+    outcome: t.outcome,
+    extra_presses: t.extra_presses ?? 0,
+  }));
+}
+
+export function probeRowsFor(probes) {
+  return (probes || []).map((p) => ({
+    probe_index: p.probe_index,
+    elapsed: Number(p.elapsed).toFixed(2),
+    response: p.response ?? "",
+    latency_ms: fixed(p.latency_ms, 1),
+    trials_before: p.trials_before ?? "",
+  }));
 }
