@@ -83,6 +83,10 @@ export function createTask({ root, participant, condition, minutes, onBegin }) {
   return {
     trials: [],   // arithmetic records no per-item data; SART does
 
+    /* Arithmetic is self-paced, so there is no boundary to wait for: the
+     * participant is mid-problem or mid-typing either way. */
+    msToBoundary() { return 0; },
+
     start() {
       accepting = true;
       feedbackEl.textContent = "";

@@ -31,6 +31,26 @@
   #stimulus.sart-mask { color: var(--mute); }
   #stimulus.sart-idle { font-size: clamp(1.1rem, 4.5vw, 1.5rem); font-weight: 600; }
   #sart-help { min-height: 2.5em; font-size: 1rem; margin-top: 14px; }
+
+  /* Thought probe. Left-aligned and quiet: it is a question, not a scoreboard,
+     and anything that reads as feedback would push the answer around. */
+  .probe { max-width: 480px; margin: 0 auto; text-align: left; }
+  .probe-q { font-size: 1.35rem; font-weight: 600; margin: 0 0 18px; text-align: center; }
+  .probe-choices { display: grid; gap: 10px; }
+  .probe-choice {
+    display: flex; align-items: center; gap: 12px; width: 100%;
+    padding: 14px 16px; font-size: 1rem; text-align: left;
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--card); color: inherit; cursor: pointer;
+  }
+  .probe-choice:hover, .probe-choice:focus-visible {
+    border-color: var(--green); outline: none;
+  }
+  .probe-key {
+    flex: 0 0 auto; width: 26px; height: 26px; border-radius: 6px;
+    display: grid; place-items: center; font-size: .85rem; font-weight: 700;
+    background: var(--line); color: var(--mute);
+  }
   #clock { font-variant-numeric: tabular-nums; color: var(--mute); margin-top: 18px; }
   #cam { position: fixed; right: 12px; bottom: 12px; width: 150px; border-radius: 10px;
          border: 1px solid var(--line); transform: scaleX(-1); z-index: 5; background: #000; }

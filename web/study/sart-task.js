@@ -182,6 +182,16 @@ export function createTask({ root, participant, condition, minutes, onBegin }) {
   return {
     trials,
 
+    /* How long until the current trial ends, so the harness can hold a probe
+     * until a boundary. Interrupting mid-stimulus would cost that trial (it
+     * is marked dropped, never scored on a partial window) and show the card
+     * over a half-read digit. Bounded by one trial, so the probe is never
+     * delayed by more than ~1.2 s. */
+    msToBoundary() {
+      if (index < 0 || index >= digits.length) return 0;
+      return Math.max(0, (index + 1) * TRIAL_MS - taskTime());
+    },
+
     start() {
       accepting = true;
       t0 = nowMs();

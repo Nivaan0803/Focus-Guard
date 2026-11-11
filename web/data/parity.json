@@ -602,5 +602,30 @@
    "focused": 2,
    "distracted": 2
   }
+ },
+ "probes": {
+  "_note": "Regression lock for study/probes.js. Probe times are seeded per participant+condition so a session is reproducible; the spacing rules are what keep a probe from being anticipated or from landing with no window to report on.",
+  "seed": "P01-alerts-probes",
+  "minutes": 10,
+  "schedule": [
+   71,
+   127,
+   196,
+   271,
+   325,
+   395,
+   447,
+   492,
+   557
+  ],
+  "min_gap": 45,
+  "max_gap": 75,
+  "tail_guard": 30,
+  "choices": [
+   "on_task",
+   "task_related",
+   "mind_wandering",
+   "external"
+  ]
  }
 }

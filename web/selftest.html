@@ -35,6 +35,7 @@ import { ProblemSource } from "./study/arithmetic.js";
 import { seeded } from "./study/rng.js";
 import { buildSequence, classify, summarize, TARGET_DIGIT } from "./study/sart.js";
 import { deriveLabels, mapProbe, TASK_RELATED } from "./lib/labels.js";
+import { probeSchedule, CHOICES } from "./study/probes.js";
 
 const EPS = 1e-9;
 const results = [];
@@ -242,6 +243,46 @@ check("eyeOpenness", near(open, ref.openness_expected, 1e-12), open, ref.opennes
         mapProbe("external"), "distracted");
   check("mapProbe task_related drops by default", mapProbe("task_related") === null,
         mapProbe("task_related"), null);
+}
+
+/* ---- 11. Probe schedule ----
+ * Seeded so a participant's probe times are reproducible. The spacing rules
+ * are what stop a probe being anticipated (which would itself be a form of
+ * on-task vigilance) or landing with no preceding window to report on. */
+{
+  const ref11 = ref.probes;
+  const got = probeSchedule(seeded(ref11.seed), ref11.minutes);
+  check("probe schedule matches fixture",
+        JSON.stringify(got) === JSON.stringify(ref11.schedule),
+        got.join(","), ref11.schedule.join(","));
+
+  const gaps = got.map((t, i) => (i === 0 ? t : t - got[i - 1]));
+  check("probe gaps within bounds",
+        gaps.every((g) => g >= ref11.min_gap && g <= ref11.max_gap),
+        gaps.join(","), `${ref11.min_gap}-${ref11.max_gap}`);
+  check("probe times strictly increasing",
+        got.every((t, i) => i === 0 || t > got[i - 1]), got.join(","), "increasing");
+  check("no probe inside the tail guard",
+        got.every((t) => t <= ref11.minutes * 60 - ref11.tail_guard),
+        got[got.length - 1], `<= ${ref11.minutes * 60 - ref11.tail_guard}`);
+  check("probe schedule is deterministic",
+        JSON.stringify(probeSchedule(seeded(ref11.seed), ref11.minutes)) === JSON.stringify(got),
+        "differs", "identical");
+  check("probe schedule differs between conditions",
+        JSON.stringify(probeSchedule(seeded("P01-no_alerts-probes"), ref11.minutes))
+          !== JSON.stringify(got),
+        "identical", "differs");
+
+  // A card offering an answer lib/labels.js has never heard of would drop
+  // silently out of every training export.
+  check("probe choices map to known responses",
+        JSON.stringify(CHOICES.map((c) => c.value)) === JSON.stringify(ref11.choices),
+        CHOICES.map((c) => c.value).join(","), ref11.choices.join(","));
+  check("every probe choice maps to a verdict or an explicit drop",
+        CHOICES.every((c) => {
+          const v = mapProbe(c.value, TASK_RELATED.DROP);
+          return v === "focused" || v === "distracted" || c.value === "task_related";
+        }), "unmapped choice", "all mapped");
 }
 
 /* ---- render ---- */

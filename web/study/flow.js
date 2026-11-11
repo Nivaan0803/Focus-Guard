@@ -17,6 +17,8 @@
 
 import { gate, consentConfig } from "../lib/consent.js";
 import { PROVENANCE } from "../lib/labels.js";
+import { seeded } from "./rng.js";
+import { probeSchedule, askProbe } from "./probes.js";
 import * as vision from "../lib/vision.js";
 import { cameraFeatures, poseFromMatrix, irisPosition } from "../lib/features.js";
 import { Calibration } from "../lib/calibrate.js";
@@ -315,6 +317,7 @@ function task(session, detector) {
       <div id="task">
         <p class="banner ${withCam ? "" : "hidden"}" id="banner">Focused</p>
         <div id="taskroot"></div>
+        <div id="proberoot" hidden></div>
         <div class="meter ${withCam ? "" : "hidden"}" style="max-width:320px;margin:18px auto 0">
           <span id="meter"></span>
         </div>
@@ -324,15 +327,29 @@ function task(session, detector) {
 
     const clockEl = $("#clock");
     const bannerEl = $("#banner"), meterEl = $("#meter");
-    const taskRoot = $("#taskroot");
+    const taskRoot = $("#taskroot"), probeRoot = $("#proberoot");
 
     let started = null, ends = null, lastPoll = null;
     let timesLeft = 0, secondsAway = 0;
     let wasForeground = true;
     let pollTimer = null, tickTimer = null;
     let active = null;
+    let done = false;
+
+    /* Probes. `schedule` holds seconds from task start, measured in TASK
+     * time: the clock stops while a card is up, so `minutes` keeps meaning
+     * what it says while wall time runs longer. Both figures are reported so
+     * the denominator is recoverable in analysis. */
+    let schedule = [];
+    let nextProbe = 0;
+    let probeSeconds = 0;
+    let probing = false;
+    let tickLabel = PROVENANCE.TASK;
+    const probes = [];
 
     const finish = () => {
+      if (done) return;
+      done = true;
       clearInterval(pollTimer);
       clearInterval(tickTimer);
       active.stop();
@@ -343,11 +360,82 @@ function task(session, detector) {
         // harness's own.
         ...active.summary(),
         trials: active.trials,
+        probes,
         timesLeft, secondsAway,
+        // Wall time exceeds minutes*60 once probes pause the clock, so both
+        // are stored: seconds_away was measured over wallSeconds, not over
+        // the nominal session length.
+        wallSeconds: now() - started,
+        probeSeconds,
+        probesShown: nextProbe,
         rows: detector ? detector.rows : [],
         alerts: detector ? detector.score.alerts : 0,
         modelName: detector ? describeModel(detector.model) : "",
       });
+    };
+
+    /* Suspend everything, ask, then give back exactly the time the question
+     * cost. The clock stop is what keeps the measures honest: left running,
+     * an alt-tab during a probe would increment times_left, and deliberation
+     * would be charged against the participant's task time. */
+    const fireProbe = async () => {
+      probing = true;
+
+      // Hold until the current trial ends so the card never lands over a
+      // half-read digit. Bounded by one trial (~1.2 s).
+      const wait = active.msToBoundary ? active.msToBoundary() : 0;
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      if (done) return;
+
+      clearInterval(pollTimer);
+      pollTimer = null;
+
+      const openedAt = now();
+      const elapsed = openedAt - started - probeSeconds;
+      const trialsBefore = active.trials.length;
+
+      active.suspend();
+      tickLabel = PROVENANCE.PROBE;
+
+      // The banner and meter are the detector telling the participant what it
+      // thinks of them. Leaving that on screen while asking where their
+      // attention was would contaminate the one independent measure in the
+      // study, so both are hidden for the duration.
+      const bannerWas = bannerEl.style.visibility;
+      const meterWas = meterEl.parentElement.style.visibility;
+      bannerEl.style.visibility = "hidden";
+      meterEl.parentElement.style.visibility = "hidden";
+
+      taskRoot.hidden = true;
+      probeRoot.hidden = false;
+      const { response, latencyMs } = await askProbe(probeRoot, () => performance.now());
+
+      probes.push({
+        probe_index: nextProbe,
+        elapsed,
+        response,
+        latency_ms: latencyMs,
+        trials_before: trialsBefore,
+      });
+      nextProbe += 1;
+
+      probeRoot.hidden = true;
+      probeRoot.innerHTML = "";
+      taskRoot.hidden = false;
+      bannerEl.style.visibility = bannerWas;
+      meterEl.parentElement.style.visibility = meterWas;
+
+      const paused = now() - openedAt;
+      probeSeconds += paused;
+      ends += paused;
+      lastPoll = now();
+      wasForeground = document.hasFocus() && !document.hidden;
+
+      tickLabel = PROVENANCE.TASK;
+      probing = false;
+      if (done) return;
+      active.resume();
+      pollTimer = setInterval(poll, POLL_MS);
     };
 
     // focus_study.py:130-137
@@ -364,6 +452,12 @@ function task(session, detector) {
       const left = ends - t;
       if (left <= 0) return finish();
       clockEl.textContent = `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, "0")} left`;
+
+      // Schedule times are task time, so the paused total comes back out.
+      if (!probing && nextProbe < schedule.length
+          && (t - started - probeSeconds) >= schedule[nextProbe]) {
+        fireProbe();
+      }
     };
 
     /* The task calls this when the participant has signalled they are ready.
@@ -376,6 +470,13 @@ function task(session, detector) {
       lastPoll = started;
       if (detector) detector.t0 = started;
 
+      // Seeded separately from the task's own stream, so probe timing cannot
+      // correlate with which digits a participant happened to see.
+      schedule = probeSchedule(
+        seeded(`${session.participant}-${session.condition}-probes`),
+        session.minutes,
+      );
+
       active.start(started);
       pollTimer = setInterval(poll, POLL_MS);
 
@@ -385,7 +486,12 @@ function task(session, detector) {
           // on the session row; writing it here left `label` holding no
           // information and would have had train_model.py learn to predict
           // which arm a session was. See lib/labels.js.
-          const snap = detector.tick(PROVENANCE.TASK);
+          //
+          // tickLabel switches to PROBE while a card is up: the detector keeps
+          // running (stopping it would punch a gap into a continuous series
+          // that looks like a dropout) but those rows must never be labelled
+          // by the probe that was being answered during them.
+          const snap = detector.tick(tickLabel);
           if (!snap) return;
           bannerEl.className = `banner ${snap.banner}`;
           bannerEl.textContent = snap.reason && snap.banner !== "good"
