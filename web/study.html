@@ -42,7 +42,12 @@
     padding: 14px 16px; font-size: 1rem; text-align: left;
     border: 1px solid var(--line); border-radius: 10px;
     background: var(--card); color: inherit; cursor: pointer;
+    /* The shared `button` rule centres its label. Without this the number
+       badges sit at a different x on every row, depending on how long the
+       text is, and the list loses the straight left edge you read down. */
+    justify-content: flex-start;
   }
+  .probe-choice > span:last-child { flex: 1; }
   .probe-choice:hover, .probe-choice:focus-visible {
     border-color: var(--green); outline: none;
   }
