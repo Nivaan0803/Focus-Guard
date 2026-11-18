@@ -279,9 +279,19 @@ export function gate(container, { onDecline } = {}) {
 
       flushConsentQueue();
 
-      // An existing consent for THIS form version skips the gate.
+      // A personal link carries the participant's code (?participant=P01), so
+      // nobody has to type it - and nobody can mistype P01 as "PO1", which
+      // the pattern accepts and which would file them as someone else.
+      const linkCode = (new URLSearchParams(location.search).get("participant") || "")
+        .trim().toUpperCase();
+      const presetCode = ID_PATTERN.test(linkCode) ? linkCode : "";
+
+      // An existing consent for THIS form version skips the gate - unless the
+      // link names a different participant, as on a shared lab machine, where
+      // skipping would file the new person's session under the old code.
       const prior = storedConsent();
-      if (prior && prior.version === cfg.version && prior.participant) {
+      if (prior && prior.version === cfg.version && prior.participant
+          && (!presetCode || presetCode === prior.participant)) {
         resolve(prior);
         return;
       }
@@ -290,6 +300,7 @@ export function gate(container, { onDecline } = {}) {
       const $ = (sel) => container.querySelector(sel);
 
       const pid = $("#pid");
+      if (presetCode) pid.value = presetCode;
       const age = $("#age");
       const sname = $("#sname");
       const pname = $("#pname");
