@@ -293,8 +293,11 @@ function calibrate(detector) {
 const TASKS = {
   sart: () => import("./sart-task.js"),
   arithmetic: () => import("./arithmetic-task.js"),
+  // A realistic, self-paced work task. The default because the lab tasks
+  // produced almost no natural distraction: see dataentry.js.
+  dataentry: () => import("./dataentry-task.js"),
 };
-const DEFAULT_TASK = "sart";
+const DEFAULT_TASK = "dataentry";
 
 function taskName() {
   const want = new URLSearchParams(location.search).get("task");
@@ -335,6 +338,7 @@ function task(session, detector) {
     let wasForeground = true;
     let pollTimer = null, tickTimer = null;
     let active = null;
+    let taskModule = null;
     let done = false;
 
     /* Probes. `schedule` holds seconds from task start, measured in TASK
@@ -476,6 +480,9 @@ function task(session, detector) {
       schedule = probeSchedule(
         seeded(`${session.participant}-${session.condition}-probes`),
         session.minutes,
+        // A task may space its probes differently (dataentry asks less often,
+        // so the question does not keep reminding people they are watched).
+        taskModule?.PROBE_OPTIONS || {},
       );
 
       active.start(started);
@@ -504,8 +511,9 @@ function task(session, detector) {
       }
     };
 
-    TASKS[taskName()]().then(({ createTask }) => {
-      active = createTask({
+    TASKS[taskName()]().then((mod) => {
+      taskModule = mod;
+      active = mod.createTask({
         root: taskRoot,
         participant: session.participant,
         condition: session.condition,
@@ -646,7 +654,9 @@ async function done(session, result, selfRating) {
        <p class="muted small">You correctly held back on
           ${esc((result.sart_targets ?? 0) - (result.commission_errors ?? 0))}
           of ${esc(result.sart_targets ?? 0)} target digits.</p>`
-    : `<p><strong>${esc(result.correct)}</strong> correct out of
+    : result.task_type === "dataentry"
+      ? `<p><strong>${esc(result.attempted)}</strong> orders filed.</p>`
+      : `<p><strong>${esc(result.correct)}</strong> correct out of
           <strong>${esc(result.attempted)}</strong>.</p>`;
 
   const $ = view(`

@@ -18,7 +18,7 @@ const CHUNK = 500;
  * labels are not collected exclusively under the intervention being measured.
  * See docs/sart-redesign.md s2.1. */
 const CONDITIONS = new Set(["alerts", "no_alerts", "label_only"]);
-const TASK_TYPES = new Set(["arithmetic", "sart"]);
+const TASK_TYPES = new Set(["arithmetic", "sart", "dataentry"]);
 
 const OUTCOMES = new Set([
   "hit", "correct_omission", "commission_error", "omission_error", "dropped",
