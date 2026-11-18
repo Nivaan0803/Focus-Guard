@@ -1,5 +1,5 @@
 {
-  "version": "isef-v3-2026-11-17",
+  "version": "isef-v4-2026-11-17",
   "title": "Consent to take part in this study",
   "pdf": "consent/isef-informed-consent-v2.pdf",
   "pdfPresent": false,
@@ -15,7 +15,7 @@
     "Purpose: to test whether FocusGuard can use a regular computer webcam to detect signs of distraction, such as looking away from the screen or looking at a phone, and whether alerts help you focus.",
     "The task: a simple office job - copying order slips (a name, a date, an item code, a quantity and a price) into an on-screen form, at your own pace. You may use your computer and phone the way you normally would while working; nothing is penalised. The point is to see how attention behaves during ordinary work, not to test how fast or clever you are.",
     "Every couple of minutes the task pauses for a few seconds and asks where your attention was just before the pause, with four options to choose from. There is no right answer, nobody is judged on it, and honest answers are far more useful to the research than flattering ones.",
-    "You will do three short blocks: two that are compared with each other, and one that only collects camera data without any alerts. Time required: about 55-65 minutes in total, including setup, the blocks, and breaks between them.",
+    "You will do three short blocks: two that are compared with each other, and one that only collects camera data without any alerts. Time required: about 70-80 minutes in total, including setup, the blocks, and breaks between them.",
     "In some blocks FocusGuard watches you through the webcam and may show a banner or play a short sound when it thinks you have been distracted. In one block the camera records without ever interrupting you, and in one it is not used at all.",
     "Possible risks: eye strain from using a computer, boredom from a routine task, frustration from alerts or automatic pauses, and privacy concerns from using a webcam. You can take breaks or stop at any time.",
     "Benefits: there may be no direct benefit to you. The results could help show whether FocusGuard can detect visual distractions and help people reduce phone use while working.",

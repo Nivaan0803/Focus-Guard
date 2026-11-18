@@ -35,7 +35,7 @@ const app = document.getElementById("app");
 const camEl = document.getElementById("cam");
 const workCanvas = document.getElementById("work");
 
-const DEFAULT_MINUTES = 10;
+const DEFAULT_MINUTES = 15;
 const POLL_MS = 250;   // focus_study.py:145
 const TICK_MS = 90;    // main.py:496
 
